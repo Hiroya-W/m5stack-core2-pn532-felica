@@ -7,11 +7,11 @@
 /**************************************************************************/
 
 #include "Arduino.h"
-#include "PN532.h"
-#include "PN532_debug.h"
+#include "PN532/PN532/PN532.h"
+#include "PN532/PN532/PN532_debug.h"
 #include <string.h>
 
-#define HAL(func)   (_interface->func)
+#define HAL(func) (_interface->func)
 
 PN532::PN532(PN532Interface &interface)
 {
@@ -25,8 +25,10 @@ PN532::PN532(PN532Interface &interface)
 /**************************************************************************/
 void PN532::begin()
 {
-    HAL(begin)();
-    HAL(wakeup)();
+    HAL(begin)
+    ();
+    HAL(wakeup)
+    ();
 }
 
 /**************************************************************************/
@@ -40,17 +42,22 @@ void PN532::begin()
 void PN532::PrintHex(const uint8_t *data, const uint32_t numBytes)
 {
 #ifdef ARDUINO
-    for (uint8_t i = 0; i < numBytes; i++) {
-        if (data[i] < 0x10) {
+    for (uint8_t i = 0; i < numBytes; i++)
+    {
+        if (data[i] < 0x10)
+        {
             SERIAL.print(" 0");
-        } else {
+        }
+        else
+        {
             SERIAL.print(' ');
         }
         SERIAL.print(data[i], HEX);
     }
     SERIAL.println("");
 #else
-    for (uint8_t i = 0; i < numBytes; i++) {
+    for (uint8_t i = 0; i < numBytes; i++)
+    {
         printf(" %2X", data[i]);
     }
     printf("\n");
@@ -71,34 +78,47 @@ void PN532::PrintHex(const uint8_t *data, const uint32_t numBytes)
 void PN532::PrintHexChar(const uint8_t *data, const uint32_t numBytes)
 {
 #ifdef ARDUINO
-    for (uint8_t i = 0; i < numBytes; i++) {
-        if (data[i] < 0x10) {
+    for (uint8_t i = 0; i < numBytes; i++)
+    {
+        if (data[i] < 0x10)
+        {
             SERIAL.print(" 0");
-        } else {
+        }
+        else
+        {
             SERIAL.print(' ');
         }
         SERIAL.print(data[i], HEX);
     }
     SERIAL.print("    ");
-    for (uint8_t i = 0; i < numBytes; i++) {
+    for (uint8_t i = 0; i < numBytes; i++)
+    {
         char c = data[i];
-        if (c <= 0x1f || c > 0x7f) {
+        if (c <= 0x1f || c > 0x7f)
+        {
             SERIAL.print('.');
-        } else {
+        }
+        else
+        {
             SERIAL.print(c);
         }
     }
     SERIAL.println("");
 #else
-    for (uint8_t i = 0; i < numBytes; i++) {
+    for (uint8_t i = 0; i < numBytes; i++)
+    {
         printf(" %2X", data[i]);
     }
     printf("    ");
-    for (uint8_t i = 0; i < numBytes; i++) {
+    for (uint8_t i = 0; i < numBytes; i++)
+    {
         char c = data[i];
-        if (c <= 0x1f || c > 0x7f) {
+        if (c <= 0x1f || c > 0x7f)
+        {
             printf(".");
-        } else {
+        }
+        else
+        {
             printf("%c", c);
         }
         printf("\n");
@@ -119,13 +139,15 @@ uint32_t PN532::getFirmwareVersion(void)
 
     pn532_packetbuffer[0] = PN532_COMMAND_GETFIRMWAREVERSION;
 
-    if (HAL(writeCommand)(pn532_packetbuffer, 1)) {
+    if (HAL(writeCommand)(pn532_packetbuffer, 1))
+    {
         return 0;
     }
 
     // read data packet
     int16_t status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
-    if (0 > status) {
+    if (0 > status)
+    {
         return 0;
     }
 
@@ -139,7 +161,6 @@ uint32_t PN532::getFirmwareVersion(void)
 
     return response;
 }
-
 
 /**************************************************************************/
 /*!
@@ -158,13 +179,15 @@ uint32_t PN532::readRegister(uint16_t reg)
     pn532_packetbuffer[1] = (reg >> 8) & 0xFF;
     pn532_packetbuffer[2] = reg & 0xFF;
 
-    if (HAL(writeCommand)(pn532_packetbuffer, 3)) {
+    if (HAL(writeCommand)(pn532_packetbuffer, 3))
+    {
         return 0;
     }
 
     // read data packet
     int16_t status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
-    if (0 > status) {
+    if (0 > status)
+    {
         return 0;
     }
 
@@ -192,14 +215,15 @@ uint32_t PN532::writeRegister(uint16_t reg, uint8_t val)
     pn532_packetbuffer[2] = reg & 0xFF;
     pn532_packetbuffer[3] = val;
 
-
-    if (HAL(writeCommand)(pn532_packetbuffer, 4)) {
+    if (HAL(writeCommand)(pn532_packetbuffer, 4))
+    {
         return 0;
     }
 
     // read data packet
     int16_t status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
-    if (0 > status) {
+    if (0 > status)
+    {
         return 0;
     }
 
@@ -234,8 +258,8 @@ bool PN532::writeGPIO(uint8_t pinstate)
 
     // Fill command buffer
     pn532_packetbuffer[0] = PN532_COMMAND_WRITEGPIO;
-    pn532_packetbuffer[1] = PN532_GPIO_VALIDATIONBIT | pinstate;  // P3 Pins
-    pn532_packetbuffer[2] = 0x00;    // P7 GPIO Pins (not used ... taken by I2C)
+    pn532_packetbuffer[1] = PN532_GPIO_VALIDATIONBIT | pinstate; // P3 Pins
+    pn532_packetbuffer[2] = 0x00;                                // P7 GPIO Pins (not used ... taken by I2C)
 
     DMSG("Writing P3 GPIO: ");
     DMSG_HEX(pn532_packetbuffer[1]);
@@ -270,7 +294,8 @@ uint8_t PN532::readGPIO(void)
     if (HAL(writeCommand)(pn532_packetbuffer, 1))
         return 0x0;
 
-    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+    HAL(readResponse)
+    (pn532_packetbuffer, sizeof(pn532_packetbuffer));
 
     /* READGPIO response without prefix and suffix should be in the following format:
 
@@ -281,10 +306,12 @@ uint8_t PN532::readGPIO(void)
       b2              Interface Mode Pins (not used ... bus select pins)
     */
 
-
-    DMSG("P3 GPIO: "); DMSG_HEX(pn532_packetbuffer[7]);
-    DMSG("P7 GPIO: "); DMSG_HEX(pn532_packetbuffer[8]);
-    DMSG("I0I1 GPIO: "); DMSG_HEX(pn532_packetbuffer[9]);
+    DMSG("P3 GPIO: ");
+    DMSG_HEX(pn532_packetbuffer[7]);
+    DMSG("P7 GPIO: ");
+    DMSG_HEX(pn532_packetbuffer[8]);
+    DMSG("I0I1 GPIO: ");
+    DMSG_HEX(pn532_packetbuffer[9]);
     DMSG("\n");
 
     return pn532_packetbuffer[0];
@@ -312,12 +339,12 @@ bool PN532::SAMConfig(void)
 
 /**************************************************************************/
 /*!
-    @brief  Turn the module into power mode  will wake up on I2C or SPI request 
+    @brief  Turn the module into power mode  will wake up on I2C or SPI request
 */
 /**************************************************************************/
 bool PN532::powerDownMode()
 {
-    pn532_packetbuffer[0] = PN532_COMMAND_POWERDOWN; 
+    pn532_packetbuffer[0] = PN532_COMMAND_POWERDOWN;
     pn532_packetbuffer[1] = 0xC0; // I2C or SPI Wakeup
     pn532_packetbuffer[2] = 0x00; // no IRQ
 
@@ -348,7 +375,7 @@ bool PN532::setPassiveActivationRetries(uint8_t maxRetries)
     pn532_packetbuffer[4] = maxRetries;
 
     if (HAL(writeCommand)(pn532_packetbuffer, 5))
-        return 0x0;  // no ACK
+        return 0x0; // no ACK
 
     return (0 < HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer)));
 }
@@ -357,13 +384,13 @@ bool PN532::setPassiveActivationRetries(uint8_t maxRetries)
 /*!
     Sets the RFon/off uint8_t of the RFConfiguration register
 
-    @param  autoRFCA    0x00 No check of the external field before 
-                        activation 
-                        
-                        0x02 Check the external field before 
+    @param  autoRFCA    0x00 No check of the external field before
                         activation
 
-    @param  rFOnOff     0x00 Switch the RF field off, 0x01 switch the RF 
+                        0x02 Check the external field before
+                        activation
+
+    @param  rFOnOff     0x00 Switch the RF field off, 0x01 switch the RF
                         field on
 
     @returns    1 if everything executed properly, 0 for an error
@@ -374,10 +401,11 @@ bool PN532::setRFField(uint8_t autoRFCA, uint8_t rFOnOff)
 {
     pn532_packetbuffer[0] = PN532_COMMAND_RFCONFIGURATION;
     pn532_packetbuffer[1] = 1;
-    pn532_packetbuffer[2] = 0x00 | autoRFCA | rFOnOff;  
+    pn532_packetbuffer[2] = 0x00 | autoRFCA | rFOnOff;
 
-    if (HAL(writeCommand)(pn532_packetbuffer, 3)) {
-        return 0x0;  // command failed
+    if (HAL(writeCommand)(pn532_packetbuffer, 3))
+    {
+        return 0x0; // command failed
     }
 
     return (0 < HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer)));
@@ -393,13 +421,15 @@ bool PN532::setRFField(uint8_t autoRFCA, uint8_t rFOnOff)
 
     @returns 1 if everything executed properly, 0 for an error
 */
-bool PN532::startPassiveTargetIDDetection(uint8_t cardbaudrate) {
+bool PN532::startPassiveTargetIDDetection(uint8_t cardbaudrate)
+{
     pn532_packetbuffer[0] = PN532_COMMAND_INLISTPASSIVETARGET;
     pn532_packetbuffer[1] = 1; // max 1 cards at once (we can set this to 2 later)
     pn532_packetbuffer[2] = cardbaudrate;
 
-    if (HAL(writeCommand)(pn532_packetbuffer, 3)) {
-        return 0x0;  // command failed
+    if (HAL(writeCommand)(pn532_packetbuffer, 3))
+    {
+        return 0x0; // command failed
     }
 }
 
@@ -421,15 +451,17 @@ bool PN532::startPassiveTargetIDDetection(uint8_t cardbaudrate) {
 bool PN532::readPassiveTargetID(uint8_t cardbaudrate, uint8_t *uid, uint8_t *uidLength, uint16_t timeout, bool inlist)
 {
     pn532_packetbuffer[0] = PN532_COMMAND_INLISTPASSIVETARGET;
-    pn532_packetbuffer[1] = 1;  // max 1 cards at once (we can set this to 2 later)
+    pn532_packetbuffer[1] = 1; // max 1 cards at once (we can set this to 2 later)
     pn532_packetbuffer[2] = cardbaudrate;
 
-    if (HAL(writeCommand)(pn532_packetbuffer, 3)) {
-        return 0x0;  // command failed
+    if (HAL(writeCommand)(pn532_packetbuffer, 3))
+    {
+        return 0x0; // command failed
     }
 
     // read data packet
-    if (HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), timeout) < 0) {
+    if (HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), timeout) < 0)
+    {
         return 0x0;
     }
 
@@ -453,24 +485,27 @@ bool PN532::readPassiveTargetID(uint8_t cardbaudrate, uint8_t *uid, uint8_t *uid
     sens_res <<= 8;
     sens_res |= pn532_packetbuffer[3];
 
-    DMSG("ATQA: 0x");  DMSG_HEX(sens_res);
-    DMSG("SAK: 0x");  DMSG_HEX(pn532_packetbuffer[4]);
+    DMSG("ATQA: 0x");
+    DMSG_HEX(sens_res);
+    DMSG("SAK: 0x");
+    DMSG_HEX(pn532_packetbuffer[4]);
     DMSG("\n");
 
     /* Card appears to be Mifare Classic */
     *uidLength = pn532_packetbuffer[5];
 
-    for (uint8_t i = 0; i < pn532_packetbuffer[5]; i++) {
+    for (uint8_t i = 0; i < pn532_packetbuffer[5]; i++)
+    {
         uid[i] = pn532_packetbuffer[6 + i];
     }
 
-    if (inlist) {
+    if (inlist)
+    {
         inListedTag = pn532_packetbuffer[1];
     }
 
     return 1;
 }
-
 
 /***** Mifare Classic Functions ******/
 
@@ -480,7 +515,7 @@ bool PN532::readPassiveTargetID(uint8_t cardbaudrate, uint8_t *uid, uint8_t *uid
       in the sector (block 0 relative to the current sector)
 */
 /**************************************************************************/
-bool PN532::mifareclassic_IsFirstBlock (uint32_t uiBlock)
+bool PN532::mifareclassic_IsFirstBlock(uint32_t uiBlock)
 {
     // Test if we are in the small or big sectors
     if (uiBlock < 128)
@@ -494,7 +529,7 @@ bool PN532::mifareclassic_IsFirstBlock (uint32_t uiBlock)
       Indicates whether the specified block number is the sector trailer
 */
 /**************************************************************************/
-bool PN532::mifareclassic_IsTrailerBlock (uint32_t uiBlock)
+bool PN532::mifareclassic_IsTrailerBlock(uint32_t uiBlock)
 {
     // Test if we are in the small or big sectors
     if (uiBlock < 128)
@@ -522,35 +557,38 @@ bool PN532::mifareclassic_IsTrailerBlock (uint32_t uiBlock)
     @returns 1 if everything executed properly, 0 for an error
 */
 /**************************************************************************/
-uint8_t PN532::mifareclassic_AuthenticateBlock (uint8_t *uid, uint8_t uidLen, uint32_t blockNumber, uint8_t keyNumber, uint8_t *keyData)
+uint8_t PN532::mifareclassic_AuthenticateBlock(uint8_t *uid, uint8_t uidLen, uint32_t blockNumber, uint8_t keyNumber, uint8_t *keyData)
 {
     uint8_t i;
 
     // Hang on to the key and uid data
-    memcpy (_key, keyData, 6);
-    memcpy (_uid, uid, uidLen);
+    memcpy(_key, keyData, 6);
+    memcpy(_uid, uid, uidLen);
     _uidLen = uidLen;
 
     // Prepare the authentication command //
-    pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;   /* Data Exchange Header */
-    pn532_packetbuffer[1] = 1;                              /* Max card numbers */
+    pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE; /* Data Exchange Header */
+    pn532_packetbuffer[1] = 1;                            /* Max card numbers */
     pn532_packetbuffer[2] = (keyNumber) ? MIFARE_CMD_AUTH_B : MIFARE_CMD_AUTH_A;
-    pn532_packetbuffer[3] = blockNumber;                    /* Block Number (1K = 0..63, 4K = 0..255 */
-    memcpy (pn532_packetbuffer + 4, _key, 6);
-    for (i = 0; i < _uidLen; i++) {
-        pn532_packetbuffer[10 + i] = _uid[i];              /* 4 bytes card ID */
+    pn532_packetbuffer[3] = blockNumber; /* Block Number (1K = 0..63, 4K = 0..255 */
+    memcpy(pn532_packetbuffer + 4, _key, 6);
+    for (i = 0; i < _uidLen; i++)
+    {
+        pn532_packetbuffer[10 + i] = _uid[i]; /* 4 bytes card ID */
     }
 
     if (HAL(writeCommand)(pn532_packetbuffer, 10 + _uidLen))
         return 0;
 
     // Read the response packet
-    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+    HAL(readResponse)
+    (pn532_packetbuffer, sizeof(pn532_packetbuffer));
 
     // Check if the response is valid and we are authenticated???
     // for an auth success it should be bytes 5-7: 0xD5 0x41 0x00
     // Mifare auth error is technically byte 7: 0x14 but anything other and 0x00 is not good
-    if (pn532_packetbuffer[0] != 0x00) {
+    if (pn532_packetbuffer[0] != 0x00)
+    {
         DMSG("Authentification failed\n");
         return 0;
     }
@@ -571,33 +609,36 @@ uint8_t PN532::mifareclassic_AuthenticateBlock (uint8_t *uid, uint8_t uidLen, ui
     @returns 1 if everything executed properly, 0 for an error
 */
 /**************************************************************************/
-uint8_t PN532::mifareclassic_ReadDataBlock (uint8_t blockNumber, uint8_t *data)
+uint8_t PN532::mifareclassic_ReadDataBlock(uint8_t blockNumber, uint8_t *data)
 {
     DMSG("Trying to read 16 bytes from block ");
     DMSG_INT(blockNumber);
 
     /* Prepare the command */
     pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
-    pn532_packetbuffer[1] = 1;                      /* Card number */
-    pn532_packetbuffer[2] = MIFARE_CMD_READ;        /* Mifare Read command = 0x30 */
-    pn532_packetbuffer[3] = blockNumber;            /* Block Number (0..63 for 1K, 0..255 for 4K) */
+    pn532_packetbuffer[1] = 1;               /* Card number */
+    pn532_packetbuffer[2] = MIFARE_CMD_READ; /* Mifare Read command = 0x30 */
+    pn532_packetbuffer[3] = blockNumber;     /* Block Number (0..63 for 1K, 0..255 for 4K) */
 
     /* Send the command */
-    if (HAL(writeCommand)(pn532_packetbuffer, 4)) {
+    if (HAL(writeCommand)(pn532_packetbuffer, 4))
+    {
         return 0;
     }
 
     /* Read the response packet */
-    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+    HAL(readResponse)
+    (pn532_packetbuffer, sizeof(pn532_packetbuffer));
 
     /* If byte 8 isn't 0x00 we probably have an error */
-    if (pn532_packetbuffer[0] != 0x00) {
+    if (pn532_packetbuffer[0] != 0x00)
+    {
         return 0;
     }
 
     /* Copy the 16 data bytes to the output buffer        */
     /* Block content starts at byte 9 of a valid response */
-    memcpy (data, pn532_packetbuffer + 1, 16);
+    memcpy(data, pn532_packetbuffer + 1, 16);
 
     return 1;
 }
@@ -614,30 +655,33 @@ uint8_t PN532::mifareclassic_ReadDataBlock (uint8_t blockNumber, uint8_t *data)
     @returns 1 if everything executed properly, 0 for an error
 */
 /**************************************************************************/
-uint8_t PN532::mifareclassic_WriteDataBlock (uint8_t blockNumber, uint8_t *data)
+uint8_t PN532::mifareclassic_WriteDataBlock(uint8_t blockNumber, uint8_t *data)
 {
     /* Prepare the first command */
     pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
-    pn532_packetbuffer[1] = 1;                      /* Card number */
-    pn532_packetbuffer[2] = MIFARE_CMD_WRITE;       /* Mifare Write command = 0xA0 */
-    pn532_packetbuffer[3] = blockNumber;            /* Block Number (0..63 for 1K, 0..255 for 4K) */
-    memcpy (pn532_packetbuffer + 4, data, 16);        /* Data Payload */
+    pn532_packetbuffer[1] = 1;                /* Card number */
+    pn532_packetbuffer[2] = MIFARE_CMD_WRITE; /* Mifare Write command = 0xA0 */
+    pn532_packetbuffer[3] = blockNumber;      /* Block Number (0..63 for 1K, 0..255 for 4K) */
+    memcpy(pn532_packetbuffer + 4, data, 16); /* Data Payload */
 
     /* Send the command */
-    if (HAL(writeCommand)(pn532_packetbuffer, 20)) {
+    if (HAL(writeCommand)(pn532_packetbuffer, 20))
+    {
         return 0;
     }
 
     /* Read the response packet */
-    if (0 > HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer))) {
+    if (0 > HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer)))
+    {
         return 0;
     }
 
     /* Check status */
-    if (pn532_packetbuffer[0] != 0x00) {
-    	DMSG("Status code indicates an error: ");
-    	DMSG_HEX(pn532_packetbuffer[0]);
-    	DMSG("\n");
+    if (pn532_packetbuffer[0] != 0x00)
+    {
+        DMSG("Status code indicates an error: ");
+        DMSG_HEX(pn532_packetbuffer[0]);
+        DMSG("\n");
         return 0;
     }
 
@@ -651,7 +695,7 @@ uint8_t PN532::mifareclassic_WriteDataBlock (uint8_t blockNumber, uint8_t *data)
     @returns 1 if everything executed properly, 0 for an error
 */
 /**************************************************************************/
-uint8_t PN532::mifareclassic_FormatNDEF (void)
+uint8_t PN532::mifareclassic_FormatNDEF(void)
 {
     uint8_t sectorbuffer1[16] = {0x14, 0x01, 0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1};
     uint8_t sectorbuffer2[16] = {0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1, 0x03, 0xE1};
@@ -661,12 +705,12 @@ uint8_t PN532::mifareclassic_FormatNDEF (void)
     // for the MAD sector in NDEF records (sector 0)
 
     // Write block 1 and 2 to the card
-    if (!(mifareclassic_WriteDataBlock (1, sectorbuffer1)))
+    if (!(mifareclassic_WriteDataBlock(1, sectorbuffer1)))
         return 0;
-    if (!(mifareclassic_WriteDataBlock (2, sectorbuffer2)))
+    if (!(mifareclassic_WriteDataBlock(2, sectorbuffer2)))
         return 0;
     // Write key A and access rights card
-    if (!(mifareclassic_WriteDataBlock (3, sectorbuffer3)))
+    if (!(mifareclassic_WriteDataBlock(3, sectorbuffer3)))
         return 0;
 
     // Seems that everything was OK (?!)
@@ -691,7 +735,7 @@ uint8_t PN532::mifareclassic_FormatNDEF (void)
     @returns 1 if everything executed properly, 0 for an error
 */
 /**************************************************************************/
-uint8_t PN532::mifareclassic_WriteNDEFURI (uint8_t sectorNumber, uint8_t uriIdentifier, const char *url)
+uint8_t PN532::mifareclassic_WriteNDEFURI(uint8_t sectorNumber, uint8_t uriIdentifier, const char *url)
 {
     // Figure out how long the string is
     uint8_t len = strlen(url);
@@ -712,40 +756,49 @@ uint8_t PN532::mifareclassic_WriteNDEFURI (uint8_t sectorNumber, uint8_t uriIden
     uint8_t sectorbuffer2[16] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     uint8_t sectorbuffer3[16] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     uint8_t sectorbuffer4[16] = {0xD3, 0xF7, 0xD3, 0xF7, 0xD3, 0xF7, 0x7F, 0x07, 0x88, 0x40, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    if (len <= 6) {
+    if (len <= 6)
+    {
         // Unlikely we'll get a url this short, but why not ...
-        memcpy (sectorbuffer1 + 9, url, len);
+        memcpy(sectorbuffer1 + 9, url, len);
         sectorbuffer1[len + 9] = 0xFE;
-    } else if (len == 7) {
+    }
+    else if (len == 7)
+    {
         // 0xFE needs to be wrapped around to next block
-        memcpy (sectorbuffer1 + 9, url, len);
+        memcpy(sectorbuffer1 + 9, url, len);
         sectorbuffer2[0] = 0xFE;
-    } else if ((len > 7) && (len <= 22)) {
+    }
+    else if ((len > 7) && (len <= 22))
+    {
         // Url fits in two blocks
-        memcpy (sectorbuffer1 + 9, url, 7);
-        memcpy (sectorbuffer2, url + 7, len - 7);
+        memcpy(sectorbuffer1 + 9, url, 7);
+        memcpy(sectorbuffer2, url + 7, len - 7);
         sectorbuffer2[len - 7] = 0xFE;
-    } else if (len == 23) {
+    }
+    else if (len == 23)
+    {
         // 0xFE needs to be wrapped around to final block
-        memcpy (sectorbuffer1 + 9, url, 7);
-        memcpy (sectorbuffer2, url + 7, len - 7);
+        memcpy(sectorbuffer1 + 9, url, 7);
+        memcpy(sectorbuffer2, url + 7, len - 7);
         sectorbuffer3[0] = 0xFE;
-    } else {
+    }
+    else
+    {
         // Url fits in three blocks
-        memcpy (sectorbuffer1 + 9, url, 7);
-        memcpy (sectorbuffer2, url + 7, 16);
-        memcpy (sectorbuffer3, url + 23, len - 23);
+        memcpy(sectorbuffer1 + 9, url, 7);
+        memcpy(sectorbuffer2, url + 7, 16);
+        memcpy(sectorbuffer3, url + 23, len - 23);
         sectorbuffer3[len - 23] = 0xFE;
     }
 
     // Now write all three blocks back to the card
-    if (!(mifareclassic_WriteDataBlock (sectorNumber * 4, sectorbuffer1)))
+    if (!(mifareclassic_WriteDataBlock(sectorNumber * 4, sectorbuffer1)))
         return 0;
-    if (!(mifareclassic_WriteDataBlock ((sectorNumber * 4) + 1, sectorbuffer2)))
+    if (!(mifareclassic_WriteDataBlock((sectorNumber * 4) + 1, sectorbuffer2)))
         return 0;
-    if (!(mifareclassic_WriteDataBlock ((sectorNumber * 4) + 2, sectorbuffer3)))
+    if (!(mifareclassic_WriteDataBlock((sectorNumber * 4) + 2, sectorbuffer3)))
         return 0;
-    if (!(mifareclassic_WriteDataBlock ((sectorNumber * 4) + 3, sectorbuffer4)))
+    if (!(mifareclassic_WriteDataBlock((sectorNumber * 4) + 3, sectorbuffer4)))
         return 0;
 
     // Seems that everything was OK (?!)
@@ -763,31 +816,36 @@ uint8_t PN532::mifareclassic_WriteNDEFURI (uint8_t sectorNumber, uint8_t uriIden
                         retrieved data (if any)
 */
 /**************************************************************************/
-uint8_t PN532::mifareultralight_ReadPage (uint8_t page, uint8_t *buffer)
+uint8_t PN532::mifareultralight_ReadPage(uint8_t page, uint8_t *buffer)
 {
     /* Prepare the command */
     pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
-    pn532_packetbuffer[1] = 1;                   /* Card number */
-    pn532_packetbuffer[2] = MIFARE_CMD_READ;     /* Mifare Read command = 0x30 */
-    pn532_packetbuffer[3] = page;                /* Page Number (0..63 in most cases) */
+    pn532_packetbuffer[1] = 1;               /* Card number */
+    pn532_packetbuffer[2] = MIFARE_CMD_READ; /* Mifare Read command = 0x30 */
+    pn532_packetbuffer[3] = page;            /* Page Number (0..63 in most cases) */
 
     /* Send the command */
-    if (HAL(writeCommand)(pn532_packetbuffer, 4)) {
+    if (HAL(writeCommand)(pn532_packetbuffer, 4))
+    {
         return 0;
     }
 
     /* Read the response packet */
-    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+    HAL(readResponse)
+    (pn532_packetbuffer, sizeof(pn532_packetbuffer));
 
     /* If byte 8 isn't 0x00 we probably have an error */
-    if (pn532_packetbuffer[0] == 0x00) {
+    if (pn532_packetbuffer[0] == 0x00)
+    {
         /* Copy the 4 data bytes to the output buffer         */
         /* Block content starts at byte 9 of a valid response */
         /* Note that the command actually reads 16 bytes or 4  */
         /* pages at a time ... we simply discard the last 12  */
         /* bytes                                              */
-        memcpy (buffer, pn532_packetbuffer + 1, 4);
-    } else {
+        memcpy(buffer, pn532_packetbuffer + 1, 4);
+    }
+    else
+    {
         return 0;
     }
 
@@ -806,17 +864,18 @@ uint8_t PN532::mifareultralight_ReadPage (uint8_t page, uint8_t *buffer)
     @returns 1 if everything executed properly, 0 for an error
 */
 /**************************************************************************/
-uint8_t PN532::mifareultralight_WritePage (uint8_t page, uint8_t *buffer)
+uint8_t PN532::mifareultralight_WritePage(uint8_t page, uint8_t *buffer)
 {
     /* Prepare the first command */
     pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
     pn532_packetbuffer[1] = 1;                           /* Card number */
     pn532_packetbuffer[2] = MIFARE_CMD_WRITE_ULTRALIGHT; /* Mifare UL Write cmd = 0xA2 */
     pn532_packetbuffer[3] = page;                        /* page Number (0..63) */
-    memcpy (pn532_packetbuffer + 4, buffer, 4);          /* Data Payload */
+    memcpy(pn532_packetbuffer + 4, buffer, 4);           /* Data Payload */
 
     /* Send the command */
-    if (HAL(writeCommand)(pn532_packetbuffer, 8)) {
+    if (HAL(writeCommand)(pn532_packetbuffer, 8))
+    {
         return 0;
     }
 
@@ -841,16 +900,19 @@ bool PN532::inDataExchange(uint8_t *send, uint8_t sendLength, uint8_t *response,
     pn532_packetbuffer[0] = 0x40; // PN532_COMMAND_INDATAEXCHANGE;
     pn532_packetbuffer[1] = inListedTag;
 
-    if (HAL(writeCommand)(pn532_packetbuffer, 2, send, sendLength)) {
+    if (HAL(writeCommand)(pn532_packetbuffer, 2, send, sendLength))
+    {
         return false;
     }
 
     int16_t status = HAL(readResponse)(response, *responseLength, 1000);
-    if (status < 0) {
+    if (status < 0)
+    {
         return false;
     }
 
-    if ((response[0] & 0x3f) != 0) {
+    if ((response[0] & 0x3f) != 0)
+    {
         DMSG("Status code indicates an error\n");
         return false;
     }
@@ -858,11 +920,13 @@ bool PN532::inDataExchange(uint8_t *send, uint8_t sendLength, uint8_t *response,
     uint8_t length = status;
     length -= 1;
 
-    if (length > *responseLength) {
+    if (length > *responseLength)
+    {
         length = *responseLength; // silent truncation...
     }
 
-    for (uint8_t i = 0; i < length; i++) {
+    for (uint8_t i = 0; i < length; i++)
+    {
         response[i] = response[i + 1];
     }
     *responseLength = length;
@@ -883,38 +947,43 @@ bool PN532::inDataExchange(uint8_t *send, uint8_t sendLength, uint8_t *response,
 /**************************************************************************/
 bool PN532::inCommunicateThru(uint8_t *send, uint8_t sendLength, uint8_t *response, uint8_t *responseLength)
 {
-  pn532_packetbuffer[0] = PN532_COMMAND_INCOMMUNICATETHRU;
+    pn532_packetbuffer[0] = PN532_COMMAND_INCOMMUNICATETHRU;
 
-  if (HAL(writeCommand)(pn532_packetbuffer, 1, send, sendLength)) {
-    return false;
-  }
+    if (HAL(writeCommand)(pn532_packetbuffer, 1, send, sendLength))
+    {
+        return false;
+    }
 
-  int16_t status = HAL(readResponse)(response, *responseLength, 1000);
-  if (status < 0) {
-    return false;
-  }
+    int16_t status = HAL(readResponse)(response, *responseLength, 1000);
+    if (status < 0)
+    {
+        return false;
+    }
 
-  // check status code
-  if (response[0] != 0x0) {
-      DMSG("Status code indicates an error : 0x");
-      DMSG_HEX(pn532_packetbuffer[0]);
-      DMSG("\n");
-      return false;
-  }
+    // check status code
+    if (response[0] != 0x0)
+    {
+        DMSG("Status code indicates an error : 0x");
+        DMSG_HEX(pn532_packetbuffer[0]);
+        DMSG("\n");
+        return false;
+    }
 
-  uint8_t length = status;
-  length -= 1;
+    uint8_t length = status;
+    length -= 1;
 
-  if (length > *responseLength) {
-      length = *responseLength; // silent truncation...
-  }
+    if (length > *responseLength)
+    {
+        length = *responseLength; // silent truncation...
+    }
 
-  for (uint8_t i = 0; i < length; i++) {
-    response[i] = response[i + 1];
-  }
-  *responseLength = length;
+    for (uint8_t i = 0; i < length; i++)
+    {
+        response[i] = response[i + 1];
+    }
+    *responseLength = length;
 
-  return true;
+    return true;
 }
 
 /**************************************************************************/
@@ -931,16 +1000,19 @@ bool PN532::inListPassiveTarget()
 
     DMSG("inList passive target\n");
 
-    if (HAL(writeCommand)(pn532_packetbuffer, 3)) {
+    if (HAL(writeCommand)(pn532_packetbuffer, 3))
+    {
         return false;
     }
 
     int16_t status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), 30000);
-    if (status < 0) {
+    if (status < 0)
+    {
         return false;
     }
 
-    if (pn532_packetbuffer[0] != 1) {
+    if (pn532_packetbuffer[0] != 1)
+    {
         return false;
     }
 
@@ -949,19 +1021,26 @@ bool PN532::inListPassiveTarget()
     return true;
 }
 
-int8_t PN532::tgInitAsTarget(const uint8_t* command, const uint8_t len, const uint16_t timeout){
-  
-  int8_t status = HAL(writeCommand)(command, len);
-    if (status < 0) {
+int8_t PN532::tgInitAsTarget(const uint8_t *command, const uint8_t len, const uint16_t timeout)
+{
+
+    int8_t status = HAL(writeCommand)(command, len);
+    if (status < 0)
+    {
         return -1;
     }
 
     status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), timeout);
-    if (status > 0) {
+    if (status > 0)
+    {
         return 1;
-    } else if (PN532_TIMEOUT == status) {
+    }
+    else if (PN532_TIMEOUT == status)
+    {
         return 0;
-    } else {
+    }
+    else
+    {
         return -2;
     }
 }
@@ -974,19 +1053,18 @@ int8_t PN532::tgInitAsTarget(uint16_t timeout)
     const uint8_t command[] = {
         PN532_COMMAND_TGINITASTARGET,
         0,
-        0x00, 0x00,         //SENS_RES
-        0x00, 0x00, 0x00,   //NFCID1
-        0x40,               //SEL_RES
+        0x00, 0x00,       // SENS_RES
+        0x00, 0x00, 0x00, // NFCID1
+        0x40,             // SEL_RES
 
         0x01, 0xFE, 0x0F, 0xBB, 0xBA, 0xA6, 0xC9, 0x89, // POL_RES
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0xFF, 0xFF,
 
-        0x01, 0xFE, 0x0F, 0xBB, 0xBA, 0xA6, 0xC9, 0x89, 0x00, 0x00, //NFCID3t: Change this to desired value
+        0x01, 0xFE, 0x0F, 0xBB, 0xBA, 0xA6, 0xC9, 0x89, 0x00, 0x00, // NFCID3t: Change this to desired value
 
-        0x0a, 0x46,  0x66, 0x6D, 0x01, 0x01, 0x10, 0x02, 0x02, 0x00, 0x80, // LLCP magic number, version parameter and MIUX
-        0x00
-    };
+        0x0a, 0x46, 0x66, 0x6D, 0x01, 0x01, 0x10, 0x02, 0x02, 0x00, 0x80, // LLCP magic number, version parameter and MIUX
+        0x00};
     return tgInitAsTarget(command, sizeof(command), timeout);
 }
 
@@ -994,24 +1072,27 @@ int16_t PN532::tgGetData(uint8_t *buf, uint8_t len)
 {
     buf[0] = PN532_COMMAND_TGGETDATA;
 
-    if (HAL(writeCommand)(buf, 1)) {
+    if (HAL(writeCommand)(buf, 1))
+    {
         return -1;
     }
 
     int16_t status = HAL(readResponse)(buf, len, 3000);
-    if (0 >= status) {
+    if (0 >= status)
+    {
         return status;
     }
 
     uint16_t length = status - 1;
 
-
-    if (buf[0] != 0) {
+    if (buf[0] != 0)
+    {
         DMSG("status is not ok\n");
         return -5;
     }
 
-    for (uint8_t i = 0; i < length; i++) {
+    for (uint8_t i = 0; i < length; i++)
+    {
         buf[i] = buf[i + 1];
     }
 
@@ -1020,51 +1101,61 @@ int16_t PN532::tgGetData(uint8_t *buf, uint8_t len)
 
 bool PN532::tgSetData(const uint8_t *header, uint8_t hlen, const uint8_t *body, uint8_t blen)
 {
-    if (hlen > (sizeof(pn532_packetbuffer) - 1)) {
-        if ((body != 0) || (header == pn532_packetbuffer)) {
+    if (hlen > (sizeof(pn532_packetbuffer) - 1))
+    {
+        if ((body != 0) || (header == pn532_packetbuffer))
+        {
             DMSG("tgSetData:buffer too small\n");
             return false;
         }
 
         pn532_packetbuffer[0] = PN532_COMMAND_TGSETDATA;
-        if (HAL(writeCommand)(pn532_packetbuffer, 1, header, hlen)) {
+        if (HAL(writeCommand)(pn532_packetbuffer, 1, header, hlen))
+        {
             return false;
         }
-    } else {
-        for (int8_t i = hlen - 1; i >= 0; i--){
+    }
+    else
+    {
+        for (int8_t i = hlen - 1; i >= 0; i--)
+        {
             pn532_packetbuffer[i + 1] = header[i];
         }
         pn532_packetbuffer[0] = PN532_COMMAND_TGSETDATA;
 
-        if (HAL(writeCommand)(pn532_packetbuffer, hlen + 1, body, blen)) {
+        if (HAL(writeCommand)(pn532_packetbuffer, hlen + 1, body, blen))
+        {
             return false;
         }
     }
 
-    if (0 > HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), 3000)) {
+    if (0 > HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), 3000))
+    {
         return false;
     }
 
-    if (0 != pn532_packetbuffer[0]) {
+    if (0 != pn532_packetbuffer[0])
+    {
         return false;
     }
 
     return true;
 }
 
-int16_t PN532::inRelease(const uint8_t relevantTarget){
+int16_t PN532::inRelease(const uint8_t relevantTarget)
+{
 
     pn532_packetbuffer[0] = PN532_COMMAND_INRELEASE;
     pn532_packetbuffer[1] = relevantTarget;
 
-    if (HAL(writeCommand)(pn532_packetbuffer, 2)) {
+    if (HAL(writeCommand)(pn532_packetbuffer, 2))
+    {
         return 0;
     }
 
     // read data packet
     return HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
 }
-
 
 /***** FeliCa Functions ******/
 /**************************************************************************/
@@ -1085,64 +1176,72 @@ int16_t PN532::inRelease(const uint8_t relevantTarget){
                                        < 0: error
 */
 /**************************************************************************/
-int8_t PN532::felica_Polling(uint16_t systemCode, uint8_t requestCode, uint8_t * idm, uint8_t * pmm, uint16_t *systemCodeResponse, uint16_t timeout)
+int8_t PN532::felica_Polling(uint16_t systemCode, uint8_t requestCode, uint8_t *idm, uint8_t *pmm, uint16_t *systemCodeResponse, uint16_t timeout)
 {
-  pn532_packetbuffer[0] = PN532_COMMAND_INLISTPASSIVETARGET;
-  pn532_packetbuffer[1] = 1;
-  pn532_packetbuffer[2] = 1;
-  pn532_packetbuffer[3] = FELICA_CMD_POLLING;
-  pn532_packetbuffer[4] = (systemCode >> 8) & 0xFF;
-  pn532_packetbuffer[5] = systemCode & 0xFF;
-  pn532_packetbuffer[6] = requestCode;
-  pn532_packetbuffer[7] = 0;
+    pn532_packetbuffer[0] = PN532_COMMAND_INLISTPASSIVETARGET;
+    pn532_packetbuffer[1] = 1;
+    pn532_packetbuffer[2] = 1;
+    pn532_packetbuffer[3] = FELICA_CMD_POLLING;
+    pn532_packetbuffer[4] = (systemCode >> 8) & 0xFF;
+    pn532_packetbuffer[5] = systemCode & 0xFF;
+    pn532_packetbuffer[6] = requestCode;
+    pn532_packetbuffer[7] = 0;
 
-  if (HAL(writeCommand)(pn532_packetbuffer, 8)) {
-    DMSG("Could not send Polling command\n");
-    return -1;
-  }
+    if (HAL(writeCommand)(pn532_packetbuffer, 8))
+    {
+        DMSG("Could not send Polling command\n");
+        return -1;
+    }
 
-  int16_t status = HAL(readResponse)(pn532_packetbuffer, 22, timeout);
-  if (status < 0) {
-    DMSG("Could not receive response\n");
-    return -2;
-  }
+    int16_t status = HAL(readResponse)(pn532_packetbuffer, 22, timeout);
+    if (status < 0)
+    {
+        DMSG("Could not receive response\n");
+        return -2;
+    }
 
-  // Check NbTg (pn532_packetbuffer[7])
-  if (pn532_packetbuffer[0] == 0) {
-    DMSG("No card had detected\n");
-    return 0;
-  } else if (pn532_packetbuffer[0] != 1) {
-    DMSG("Unhandled number of targets inlisted. NbTg: ");
-    DMSG_HEX(pn532_packetbuffer[7]);
+    // Check NbTg (pn532_packetbuffer[7])
+    if (pn532_packetbuffer[0] == 0)
+    {
+        DMSG("No card had detected\n");
+        return 0;
+    }
+    else if (pn532_packetbuffer[0] != 1)
+    {
+        DMSG("Unhandled number of targets inlisted. NbTg: ");
+        DMSG_HEX(pn532_packetbuffer[7]);
+        DMSG("\n");
+        return -3;
+    }
+
+    inListedTag = pn532_packetbuffer[1];
+    DMSG("Tag number: ");
+    DMSG_HEX(pn532_packetbuffer[1]);
     DMSG("\n");
-    return -3;
-  }
 
-  inListedTag = pn532_packetbuffer[1];
-  DMSG("Tag number: ");
-  DMSG_HEX(pn532_packetbuffer[1]);
-  DMSG("\n");
+    // length check
+    uint8_t responseLength = pn532_packetbuffer[2];
+    if (responseLength != 18 && responseLength != 20)
+    {
+        DMSG("Wrong response length\n");
+        return -4;
+    }
 
-  // length check
-  uint8_t responseLength = pn532_packetbuffer[2];
-  if (responseLength != 18 && responseLength != 20) {
-    DMSG("Wrong response length\n");
-    return -4;
-  }
+    uint8_t i;
+    for (i = 0; i < 8; ++i)
+    {
+        idm[i] = pn532_packetbuffer[4 + i];
+        _felicaIDm[i] = pn532_packetbuffer[4 + i];
+        pmm[i] = pn532_packetbuffer[12 + i];
+        _felicaPMm[i] = pn532_packetbuffer[12 + i];
+    }
 
-  uint8_t i;
-  for (i=0; i<8; ++i) {
-    idm[i] = pn532_packetbuffer[4+i];
-    _felicaIDm[i] = pn532_packetbuffer[4+i];
-    pmm[i] = pn532_packetbuffer[12+i];
-    _felicaPMm[i] = pn532_packetbuffer[12+i];
-  }
+    if (responseLength == 20)
+    {
+        *systemCodeResponse = (uint16_t)((pn532_packetbuffer[20] << 8) + pn532_packetbuffer[21]);
+    }
 
-  if ( responseLength == 20 ) {
-    *systemCodeResponse = (uint16_t)((pn532_packetbuffer[20] << 8) + pn532_packetbuffer[21]);
-  }
-
-  return 1;
+    return 1;
 }
 
 /**************************************************************************/
@@ -1157,49 +1256,53 @@ int8_t PN532::felica_Polling(uint16_t systemCode, uint8_t requestCode, uint8_t *
                                      < 0: error
 */
 /**************************************************************************/
-int8_t PN532::felica_SendCommand (const uint8_t *command, uint8_t commandlength, uint8_t *response, uint8_t *responseLength)
+int8_t PN532::felica_SendCommand(const uint8_t *command, uint8_t commandlength, uint8_t *response, uint8_t *responseLength)
 {
-  if (commandlength > 0xFE) {
-    DMSG("Command length too long\n");
-    return -1;
-  }
+    if (commandlength > 0xFE)
+    {
+        DMSG("Command length too long\n");
+        return -1;
+    }
 
-  pn532_packetbuffer[0] = 0x40; // PN532_COMMAND_INDATAEXCHANGE;
-  pn532_packetbuffer[1] = inListedTag;
-  pn532_packetbuffer[2] = commandlength + 1;
+    pn532_packetbuffer[0] = 0x40; // PN532_COMMAND_INDATAEXCHANGE;
+    pn532_packetbuffer[1] = inListedTag;
+    pn532_packetbuffer[2] = commandlength + 1;
 
-  if (HAL(writeCommand)(pn532_packetbuffer, 3, command, commandlength)) {
-    DMSG("Could not send FeliCa command\n");
-    return -2;
-  }
+    if (HAL(writeCommand)(pn532_packetbuffer, 3, command, commandlength))
+    {
+        DMSG("Could not send FeliCa command\n");
+        return -2;
+    }
 
-  // Wait card response
-  int16_t status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), 200);
-  if (status < 0) {
-    DMSG("Could not receive response\n");
-    return -3;
-  }
+    // Wait card response
+    int16_t status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), 200);
+    if (status < 0)
+    {
+        DMSG("Could not receive response\n");
+        return -3;
+    }
 
-  // Check status (pn532_packetbuffer[0])
-  if ((pn532_packetbuffer[0] & 0x3F)!=0) {
-    DMSG("Status code indicates an error: ");
-    DMSG_HEX(pn532_packetbuffer[0]);
-    DMSG("\n");
-    return -4;
-  }
+    // Check status (pn532_packetbuffer[0])
+    if ((pn532_packetbuffer[0] & 0x3F) != 0)
+    {
+        DMSG("Status code indicates an error: ");
+        DMSG_HEX(pn532_packetbuffer[0]);
+        DMSG("\n");
+        return -4;
+    }
 
-  // length check
-  *responseLength = pn532_packetbuffer[1] - 1;
-  if ( (status - 2) != *responseLength) {
-    DMSG("Wrong response length\n");
-    return -5;
-  }
+    // length check
+    *responseLength = pn532_packetbuffer[1] - 1;
+    if ((status - 2) != *responseLength)
+    {
+        DMSG("Wrong response length\n");
+        return -5;
+    }
 
-  memcpy(response, &pn532_packetbuffer[2], *responseLength);
+    memcpy(response, &pn532_packetbuffer[2], *responseLength);
 
-  return 1;
+    return 1;
 }
-
 
 /**************************************************************************/
 /*!
@@ -1214,44 +1317,49 @@ int8_t PN532::felica_SendCommand (const uint8_t *command, uint8_t commandlength,
 /**************************************************************************/
 int8_t PN532::felica_RequestService(uint8_t numNode, uint16_t *nodeCodeList, uint16_t *keyVersions)
 {
-  if (numNode > FELICA_REQ_SERVICE_MAX_NODE_NUM) {
-    DMSG("numNode is too large\n");
-    return -1;
-  }
+    if (numNode > FELICA_REQ_SERVICE_MAX_NODE_NUM)
+    {
+        DMSG("numNode is too large\n");
+        return -1;
+    }
 
-  uint8_t i, j=0;
-  uint8_t cmdLen = 1 + 8 + 1 + 2*numNode;
-  uint8_t cmd[cmdLen];
-  cmd[j++] = FELICA_CMD_REQUEST_SERVICE;
-  for (i=0; i<8; ++i) {
-    cmd[j++] = _felicaIDm[i];
-  }
-  cmd[j++] = numNode;
-  for (i=0; i<numNode; ++i) {
-    cmd[j++] = nodeCodeList[i] & 0xFF;
-    cmd[j++] = (nodeCodeList[i] >> 8) & 0xff;
-  }
+    uint8_t i, j = 0;
+    uint8_t cmdLen = 1 + 8 + 1 + 2 * numNode;
+    uint8_t cmd[cmdLen];
+    cmd[j++] = FELICA_CMD_REQUEST_SERVICE;
+    for (i = 0; i < 8; ++i)
+    {
+        cmd[j++] = _felicaIDm[i];
+    }
+    cmd[j++] = numNode;
+    for (i = 0; i < numNode; ++i)
+    {
+        cmd[j++] = nodeCodeList[i] & 0xFF;
+        cmd[j++] = (nodeCodeList[i] >> 8) & 0xff;
+    }
 
-  uint8_t response[10+2*numNode];
-  uint8_t responseLength;
+    uint8_t response[10 + 2 * numNode];
+    uint8_t responseLength;
 
-  if (felica_SendCommand(cmd, cmdLen, response, &responseLength) != 1) {
-    DMSG("Request Service command failed\n");
-    return -2;
-  }
+    if (felica_SendCommand(cmd, cmdLen, response, &responseLength) != 1)
+    {
+        DMSG("Request Service command failed\n");
+        return -2;
+    }
 
-  // length check
-  if ( responseLength != 10+2*numNode ) {
-    DMSG("Request Service command failed (wrong response length)\n");
-    return -3;
-  }
+    // length check
+    if (responseLength != 10 + 2 * numNode)
+    {
+        DMSG("Request Service command failed (wrong response length)\n");
+        return -3;
+    }
 
-  for(i=0; i<numNode; i++) {
-    keyVersions[i] = (uint16_t)(response[10+i*2] + (response[10+i*2+1] << 8));
-  }
-  return 1;
+    for (i = 0; i < numNode; i++)
+    {
+        keyVersions[i] = (uint16_t)(response[10 + i * 2] + (response[10 + i * 2 + 1] << 8));
+    }
+    return 1;
 }
-
 
 /**************************************************************************/
 /*!
@@ -1262,27 +1370,29 @@ int8_t PN532::felica_RequestService(uint8_t numNode, uint16_t *nodeCodeList, uin
                               < 0: error
 */
 /**************************************************************************/
-int8_t PN532::felica_RequestResponse(uint8_t * mode)
+int8_t PN532::felica_RequestResponse(uint8_t *mode)
 {
-  uint8_t cmd[9];
-  cmd[0] = FELICA_CMD_REQUEST_RESPONSE;
-  memcpy(&cmd[1], _felicaIDm, 8);
+    uint8_t cmd[9];
+    cmd[0] = FELICA_CMD_REQUEST_RESPONSE;
+    memcpy(&cmd[1], _felicaIDm, 8);
 
-  uint8_t response[10];
-  uint8_t responseLength;
-  if (felica_SendCommand(cmd, 9, response, &responseLength) != 1) {
-    DMSG("Request Response command failed\n");
-    return -1;
-  }
+    uint8_t response[10];
+    uint8_t responseLength;
+    if (felica_SendCommand(cmd, 9, response, &responseLength) != 1)
+    {
+        DMSG("Request Response command failed\n");
+        return -1;
+    }
 
-  // length check
-  if ( responseLength != 10) {
-    DMSG("Request Response command failed (wrong response length)\n");
-    return -2;
-  }
+    // length check
+    if (responseLength != 10)
+    {
+        DMSG("Request Response command failed (wrong response length)\n");
+        return -2;
+    }
 
-  *mode = response[9];
-  return 1;
+    *mode = response[9];
+    return 1;
 }
 
 /**************************************************************************/
@@ -1298,67 +1408,76 @@ int8_t PN532::felica_RequestResponse(uint8_t * mode)
                                    < 0: error
 */
 /**************************************************************************/
-int8_t PN532::felica_ReadWithoutEncryption (uint8_t numService, const uint16_t *serviceCodeList, uint8_t numBlock, const uint16_t *blockList, uint8_t blockData[][16])
+int8_t PN532::felica_ReadWithoutEncryption(uint8_t numService, const uint16_t *serviceCodeList, uint8_t numBlock, const uint16_t *blockList, uint8_t blockData[][16])
 {
-  if (numService > FELICA_READ_MAX_SERVICE_NUM) {
-    DMSG("numService is too large\n");
-    return -1;
-  }
-  if (numBlock > FELICA_READ_MAX_BLOCK_NUM) {
-    DMSG("numBlock is too large\n");
-    return -2;
-  }
-
-  uint8_t i, j=0, k;
-  uint8_t cmdLen = 1 + 8 + 1 + 2*numService + 1 + 2*numBlock;
-  uint8_t cmd[cmdLen];
-  cmd[j++] = FELICA_CMD_READ_WITHOUT_ENCRYPTION;
-  for (i=0; i<8; ++i) {
-    cmd[j++] = _felicaIDm[i];
-  }
-  cmd[j++] = numService;
-  for (i=0; i<numService; ++i) {
-    cmd[j++] = serviceCodeList[i] & 0xFF;
-    cmd[j++] = (serviceCodeList[i] >> 8) & 0xff;
-  }
-  cmd[j++] = numBlock;
-  for (i=0; i<numBlock; ++i) {
-    cmd[j++] = (blockList[i] >> 8) & 0xFF;
-    cmd[j++] = blockList[i] & 0xff;
-  }
-
-  uint8_t response[12+16*numBlock];
-  uint8_t responseLength;
-  if (felica_SendCommand(cmd, cmdLen, response, &responseLength) != 1) {
-    DMSG("Read Without Encryption command failed\n");
-    return -3;
-  }
-
-  // length check
-  if ( responseLength != 12+16*numBlock ) {
-    DMSG("Read Without Encryption command failed (wrong response length)\n");
-    return -4;
-  }
-
-  // status flag check
-  if ( response[9] != 0 || response[10] != 0 ) {
-    DMSG("Read Without Encryption command failed (Status Flag: ");
-    DMSG_HEX(pn532_packetbuffer[9]);
-    DMSG_HEX(pn532_packetbuffer[10]);
-    DMSG(")\n");
-    return -5;
-  }
-
-  k = 12;
-  for(i=0; i<numBlock; i++ ) {
-    for(j=0; j<16; j++ ) {
-      blockData[i][j] = response[k++];
+    if (numService > FELICA_READ_MAX_SERVICE_NUM)
+    {
+        DMSG("numService is too large\n");
+        return -1;
     }
-  }
+    if (numBlock > FELICA_READ_MAX_BLOCK_NUM)
+    {
+        DMSG("numBlock is too large\n");
+        return -2;
+    }
 
-  return 1;
+    uint8_t i, j = 0, k;
+    uint8_t cmdLen = 1 + 8 + 1 + 2 * numService + 1 + 2 * numBlock;
+    uint8_t cmd[cmdLen];
+    cmd[j++] = FELICA_CMD_READ_WITHOUT_ENCRYPTION;
+    for (i = 0; i < 8; ++i)
+    {
+        cmd[j++] = _felicaIDm[i];
+    }
+    cmd[j++] = numService;
+    for (i = 0; i < numService; ++i)
+    {
+        cmd[j++] = serviceCodeList[i] & 0xFF;
+        cmd[j++] = (serviceCodeList[i] >> 8) & 0xff;
+    }
+    cmd[j++] = numBlock;
+    for (i = 0; i < numBlock; ++i)
+    {
+        cmd[j++] = (blockList[i] >> 8) & 0xFF;
+        cmd[j++] = blockList[i] & 0xff;
+    }
+
+    uint8_t response[12 + 16 * numBlock];
+    uint8_t responseLength;
+    if (felica_SendCommand(cmd, cmdLen, response, &responseLength) != 1)
+    {
+        DMSG("Read Without Encryption command failed\n");
+        return -3;
+    }
+
+    // length check
+    if (responseLength != 12 + 16 * numBlock)
+    {
+        DMSG("Read Without Encryption command failed (wrong response length)\n");
+        return -4;
+    }
+
+    // status flag check
+    if (response[9] != 0 || response[10] != 0)
+    {
+        DMSG("Read Without Encryption command failed (Status Flag: ");
+        DMSG_HEX(pn532_packetbuffer[9]);
+        DMSG_HEX(pn532_packetbuffer[10]);
+        DMSG(")\n");
+        return -5;
+    }
+
+    k = 12;
+    for (i = 0; i < numBlock; i++)
+    {
+        for (j = 0; j < 16; j++)
+        {
+            blockData[i][j] = response[k++];
+        }
+    }
+
+    return 1;
 }
-
 
 /**************************************************************************/
 /*!
@@ -1373,63 +1492,73 @@ int8_t PN532::felica_ReadWithoutEncryption (uint8_t numService, const uint16_t *
                                    < 0: error
 */
 /**************************************************************************/
-int8_t PN532::felica_WriteWithoutEncryption (uint8_t numService, const uint16_t *serviceCodeList, uint8_t numBlock, const uint16_t *blockList, uint8_t blockData[][16])
+int8_t PN532::felica_WriteWithoutEncryption(uint8_t numService, const uint16_t *serviceCodeList, uint8_t numBlock, const uint16_t *blockList, uint8_t blockData[][16])
 {
-  if (numService > FELICA_WRITE_MAX_SERVICE_NUM) {
-    DMSG("numService is too large\n");
-    return -1;
-  }
-  if (numBlock > FELICA_WRITE_MAX_BLOCK_NUM) {
-    DMSG("numBlock is too large\n");
-    return -2;
-  }
-
-  uint8_t i, j=0, k;
-  uint8_t cmdLen = 1 + 8 + 1 + 2*numService + 1 + 2*numBlock + 16 * numBlock;
-  uint8_t cmd[cmdLen];
-  cmd[j++] = FELICA_CMD_WRITE_WITHOUT_ENCRYPTION;
-  for (i=0; i<8; ++i) {
-    cmd[j++] = _felicaIDm[i];
-  }
-  cmd[j++] = numService;
-  for (i=0; i<numService; ++i) {
-    cmd[j++] = serviceCodeList[i] & 0xFF;
-    cmd[j++] = (serviceCodeList[i] >> 8) & 0xff;
-  }
-  cmd[j++] = numBlock;
-  for (i=0; i<numBlock; ++i) {
-    cmd[j++] = (blockList[i] >> 8) & 0xFF;
-    cmd[j++] = blockList[i] & 0xff;
-  }
-  for (i=0; i<numBlock; ++i) {
-    for(k=0; k<16; k++) {
-      cmd[j++] = blockData[i][k];
+    if (numService > FELICA_WRITE_MAX_SERVICE_NUM)
+    {
+        DMSG("numService is too large\n");
+        return -1;
     }
-  }
+    if (numBlock > FELICA_WRITE_MAX_BLOCK_NUM)
+    {
+        DMSG("numBlock is too large\n");
+        return -2;
+    }
 
-  uint8_t response[11];
-  uint8_t responseLength;
-  if (felica_SendCommand(cmd, cmdLen, response, &responseLength) != 1) {
-    DMSG("Write Without Encryption command failed\n");
-    return -3;
-  }
+    uint8_t i, j = 0, k;
+    uint8_t cmdLen = 1 + 8 + 1 + 2 * numService + 1 + 2 * numBlock + 16 * numBlock;
+    uint8_t cmd[cmdLen];
+    cmd[j++] = FELICA_CMD_WRITE_WITHOUT_ENCRYPTION;
+    for (i = 0; i < 8; ++i)
+    {
+        cmd[j++] = _felicaIDm[i];
+    }
+    cmd[j++] = numService;
+    for (i = 0; i < numService; ++i)
+    {
+        cmd[j++] = serviceCodeList[i] & 0xFF;
+        cmd[j++] = (serviceCodeList[i] >> 8) & 0xff;
+    }
+    cmd[j++] = numBlock;
+    for (i = 0; i < numBlock; ++i)
+    {
+        cmd[j++] = (blockList[i] >> 8) & 0xFF;
+        cmd[j++] = blockList[i] & 0xff;
+    }
+    for (i = 0; i < numBlock; ++i)
+    {
+        for (k = 0; k < 16; k++)
+        {
+            cmd[j++] = blockData[i][k];
+        }
+    }
 
-  // length check
-  if ( responseLength != 11 ) {
-    DMSG("Write Without Encryption command failed (wrong response length)\n");
-    return -4;
-  }
+    uint8_t response[11];
+    uint8_t responseLength;
+    if (felica_SendCommand(cmd, cmdLen, response, &responseLength) != 1)
+    {
+        DMSG("Write Without Encryption command failed\n");
+        return -3;
+    }
 
-  // status flag check
-  if ( response[9] != 0 || response[10] != 0 ) {
-    DMSG("Write Without Encryption command failed (Status Flag: ");
-    DMSG_HEX(pn532_packetbuffer[9]);
-    DMSG_HEX(pn532_packetbuffer[10]);
-    DMSG(")\n");
-    return -5;
-  }
+    // length check
+    if (responseLength != 11)
+    {
+        DMSG("Write Without Encryption command failed (wrong response length)\n");
+        return -4;
+    }
 
-  return 1;
+    // status flag check
+    if (response[9] != 0 || response[10] != 0)
+    {
+        DMSG("Write Without Encryption command failed (Status Flag: ");
+        DMSG_HEX(pn532_packetbuffer[9]);
+        DMSG_HEX(pn532_packetbuffer[10]);
+        DMSG(")\n");
+        return -5;
+    }
+
+    return 1;
 }
 
 /**************************************************************************/
@@ -1442,34 +1571,36 @@ int8_t PN532::felica_WriteWithoutEncryption (uint8_t numService, const uint16_t 
                                      < 0: error
 */
 /**************************************************************************/
-int8_t PN532::felica_RequestSystemCode(uint8_t * numSystemCode, uint16_t *systemCodeList)
+int8_t PN532::felica_RequestSystemCode(uint8_t *numSystemCode, uint16_t *systemCodeList)
 {
-  uint8_t cmd[9];
-  cmd[0] = FELICA_CMD_REQUEST_SYSTEM_CODE;
-  memcpy(&cmd[1], _felicaIDm, 8);
+    uint8_t cmd[9];
+    cmd[0] = FELICA_CMD_REQUEST_SYSTEM_CODE;
+    memcpy(&cmd[1], _felicaIDm, 8);
 
-  uint8_t response[10 + 2 * 16];
-  uint8_t responseLength;
-  if (felica_SendCommand(cmd, 9, response, &responseLength) != 1) {
-    DMSG("Request System Code command failed\n");
-    return -1;
-  }
-  *numSystemCode = response[9];
+    uint8_t response[10 + 2 * 16];
+    uint8_t responseLength;
+    if (felica_SendCommand(cmd, 9, response, &responseLength) != 1)
+    {
+        DMSG("Request System Code command failed\n");
+        return -1;
+    }
+    *numSystemCode = response[9];
 
-  // length check
-  if ( responseLength < 10 + 2 * *numSystemCode ) {
-    DMSG("Request System Code command failed (wrong response length)\n");
-    return -2;
-  }
+    // length check
+    if (responseLength < 10 + 2 * *numSystemCode)
+    {
+        DMSG("Request System Code command failed (wrong response length)\n");
+        return -2;
+    }
 
-  uint8_t i;
-  for(i=0; i<*numSystemCode; i++) {
-    systemCodeList[i] = (uint16_t)((response[10+i*2]<< 8) + response[10+i*2+1]);
-  }
+    uint8_t i;
+    for (i = 0; i < *numSystemCode; i++)
+    {
+        systemCodeList[i] = (uint16_t)((response[10 + i * 2] << 8) + response[10 + i * 2 + 1]);
+    }
 
-  return 1;
+    return 1;
 }
-
 
 /**************************************************************************/
 /*!
@@ -1480,30 +1611,33 @@ int8_t PN532::felica_RequestSystemCode(uint8_t * numSystemCode, uint16_t *system
 /**************************************************************************/
 int8_t PN532::felica_Release()
 {
-  // InRelease
-  pn532_packetbuffer[0] = PN532_COMMAND_INRELEASE;
-  pn532_packetbuffer[1] = 0x00;   // All target
-  DMSG("Release all FeliCa target\n");
+    // InRelease
+    pn532_packetbuffer[0] = PN532_COMMAND_INRELEASE;
+    pn532_packetbuffer[1] = 0x00; // All target
+    DMSG("Release all FeliCa target\n");
 
-  if (HAL(writeCommand)(pn532_packetbuffer, 2)) {
-    DMSG("No ACK\n");
-    return -1;  // no ACK
-  }
+    if (HAL(writeCommand)(pn532_packetbuffer, 2))
+    {
+        DMSG("No ACK\n");
+        return -1; // no ACK
+    }
 
-  // Wait card response
-  int16_t frameLength = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), 1000);
-  if (frameLength < 0) {
-    DMSG("Could not receive response\n");
-    return -2;
-  }
+    // Wait card response
+    int16_t frameLength = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), 1000);
+    if (frameLength < 0)
+    {
+        DMSG("Could not receive response\n");
+        return -2;
+    }
 
-  // Check status (pn532_packetbuffer[0])
-  if ((pn532_packetbuffer[0] & 0x3F)!=0) {
-    DMSG("Status code indicates an error: ");
-    DMSG_HEX(pn532_packetbuffer[7]);
-    DMSG("\n");
-    return -3;
-  }
+    // Check status (pn532_packetbuffer[0])
+    if ((pn532_packetbuffer[0] & 0x3F) != 0)
+    {
+        DMSG("Status code indicates an error: ");
+        DMSG_HEX(pn532_packetbuffer[7]);
+        DMSG("\n");
+        return -3;
+    }
 
-  return 1;
+    return 1;
 }

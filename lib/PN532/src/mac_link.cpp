@@ -1,11 +1,11 @@
 
-#include "mac_link.h"
-#include "PN532_debug.h"
+#include "PN532/PN532/mac_link.h"
+#include "PN532/PN532/PN532_debug.h"
 
 int8_t MACLink::activateAsTarget(uint16_t timeout)
 {
-	pn532.begin();
-	pn532.SAMConfig();
+    pn532.begin();
+    pn532.SAMConfig();
     return pn532.tgInitAsTarget(timeout);
 }
 
