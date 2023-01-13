@@ -1,24 +1,20 @@
-/**************************************************************************/
-/*!
-    This example will attempt to connect to an FeliCa
-    card or tag and retrieve some basic information about it
-    that can be used to determine what type of card it is.
-
-    Note that you need the baud rate to be 115200 because we need to print
-    out the data and read from the card at the same time!
-
-    To enable debug message, define DEBUG in PN532/PN532_debug.h
-
- */
-/**************************************************************************/
 #include <Arduino.h>
+#include <M5Core2.h>
+
+#define LGFX_M5STACK_CORE2
+#define LGFX_USE_V1
+
+#include <LovyanGFX.hpp>
+#include <LGFX_AUTODETECT.hpp>
+
+static LGFX lcd;
 
 #if 1
 #include <SPI.h>
-#include <PN532_SPI.h>
-#include <PN532.h>
+#include <PN532/PN532_SPI/PN532_SPI.h>
+#include <PN532/PN532/PN532.h>
 
-PN532_SPI pn532spi(SPI, 10);
+PN532_SPI pn532spi(SPI, 27);
 PN532 nfc(pn532spi);
 #elif 0
 #include <PN532_HSU.h>
@@ -35,7 +31,7 @@ PN532_I2C pn532i2c(Wire);
 PN532 nfc(pn532i2c);
 #endif
 
-#include <PN532_debug.h>
+#include <PN532/PN532/PN532_debug.h>
 
 uint8_t _prevIDm[8];
 unsigned long _prevTime;
@@ -49,6 +45,14 @@ void PrintHex8(const uint8_t d)
 
 void setup(void)
 {
+  // put your setup code here, to run once:
+  M5.begin();
+  lcd.init();
+  lcd.setFont(&fonts::lgfxJapanGothic_40);
+  lcd.setBrightness(128);
+  lcd.setCursor(0, 0);
+  lcd.println("Hello World");
+
   Serial.begin(115200);
   Serial.println("Hello!");
 
