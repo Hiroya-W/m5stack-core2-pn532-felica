@@ -65,8 +65,8 @@ void setup(void) {
 }
 
 void loop(void) {
-    uint8_t ret;
-    uint16_t systemCode = 0xFFFF;
+    int8_t ret;
+    uint16_t systemCode = 0xFE00;
     uint8_t requestCode = 0x01;  // System Code request
     uint8_t idm[8];
     uint8_t pmm[8];
@@ -103,26 +103,41 @@ void loop(void) {
     memcpy(_prevIDm, idm, 8);
     _prevTime = millis();
 
-    uint8_t blockData[3][16];
+    uint8_t blockData[4][16];
     uint16_t serviceCodeList[1];
-    uint16_t blockList[3];
+    uint16_t blockList[4];
 
     Serial.print("Read Without Encryption command -> ");
-    serviceCodeList[0] = 0x000B;
+    serviceCodeList[0] = 0x1A8B;
     blockList[0] = 0x8000;
     blockList[1] = 0x8001;
     blockList[2] = 0x8002;
-    ret = nfc.felica_ReadWithoutEncryption(1, serviceCodeList, 3, blockList, blockData);
+    blockList[3] = 0x8003;
+    ret = nfc.felica_ReadWithoutEncryption(1, serviceCodeList, 4, blockList, blockData);
     if (ret != 1) {
         Serial.println("error");
+        Serial.printf("  Error code: %d\n", ret);
     } else {
         Serial.println("OK!");
-        for (int i = 0; i < 3; i++) {
-            Serial.print("  Block no. ");
-            Serial.print(i, DEC);
-            Serial.print(": ");
-            nfc.PrintHex(blockData[i], 16);
+        Serial.print("  Student ID: ");
+        for (int i = 0; i < 8; i++) {
+            Serial.printf("%d", blockData[0][6 + i] & 0x0F);
         }
+        Serial.println();
+        Serial.print("  Name: ");
+        for (int i = 0; i < 16; i++) {
+            Serial.printf("%02X ", blockData[1][i]);
+        }
+        Serial.println();
+        Serial.print("  Period of validity: ");
+        for (int i = 0; i < 8; i++) {
+            Serial.printf("%d", blockData[2][8 + i] & 0x0F);
+        }
+        Serial.print(" - ");
+        for (int i = 0; i < 8; i++) {
+            Serial.printf("%d", blockData[3][i] & 0x0F);
+        }
+        Serial.println();
     }
 
     // Wait 1 second before continuing
