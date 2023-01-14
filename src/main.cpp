@@ -107,28 +107,6 @@ void loop(void) {
     uint16_t serviceCodeList[1];
     uint16_t blockList[3];
 
-    Serial.println("Write Without Encryption command ");
-    serviceCodeList[0] = 0x0009;
-    blockList[0] = 0x8000;
-    unsigned long now = millis();
-    blockData[0][3] = now & 0xFF;
-    blockData[0][2] = (now >>= 8) & 0xFF;
-    blockData[0][1] = (now >>= 8) & 0xFF;
-    blockData[0][0] = (now >>= 8) & 0xFF;
-    Serial.print("   Writing current millis (");
-    PrintHex8(blockData[0][0]);
-    PrintHex8(blockData[0][1]);
-    PrintHex8(blockData[0][2]);
-    PrintHex8(blockData[0][3]);
-    Serial.print(" ) to Block 0 -> ");
-    ret = nfc.felica_WriteWithoutEncryption(1, serviceCodeList, 1, blockList, blockData);
-    if (ret != 1) {
-        Serial.println("error");
-    } else {
-        Serial.println("OK!");
-    }
-    memset(blockData[0], 0, 16);
-
     Serial.print("Read Without Encryption command -> ");
     serviceCodeList[0] = 0x000B;
     blockList[0] = 0x8000;
