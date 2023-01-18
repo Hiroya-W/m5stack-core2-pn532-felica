@@ -12,12 +12,17 @@
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
 
+#define PIN_SPI_SS (27)
+#define PIN_PN532_IRQ (19)
+
 static LGFX lcd;
 
-PN532_SPI pn532spi(SPI, 27);
+PN532_SPI pn532spi(SPI, PIN_SPI_SS);
 PN532 nfc(pn532spi);
 uint8_t _prevIDm[8];
 unsigned long _prevTime;
+
+volatile boolean irq = false;
 
 void PrintHex8(const uint8_t d) {
     Serial.print(" ");
@@ -25,8 +30,15 @@ void PrintHex8(const uint8_t d) {
     Serial.print(d & 0x0F, HEX);
 }
 
+void cardreading() {
+    Serial.println("INT");
+    irq = true;
+}
+
+
 void setup(void) {
     // put your setup code here, to run once:
+    pinMode(PIN_PN532_IRQ,INPUT_PULLUP);
     M5.begin();
     lcd.init();
     lcd.setFont(&fonts::lgfxJapanGothic_40);
@@ -62,6 +74,13 @@ void setup(void) {
     nfc.SAMConfig();
 
     memset(_prevIDm, 0, 8);
+    uint16_t systemCode = 0xFE00;
+    uint8_t requestCode = 0x01;  // System Code request
+    uint8_t idm[8];
+    uint8_t pmm[8];
+    uint16_t systemCodeResponse;
+    nfc.felica_WaitingCard(systemCode, requestCode, idm, pmm, &systemCodeResponse);
+    attachInterrupt(PIN_PN532_IRQ, cardreading, FALLING);
 }
 
 void loop(void) {
@@ -72,75 +91,87 @@ void loop(void) {
     uint8_t pmm[8];
     uint16_t systemCodeResponse;
 
-    // Wait for an FeliCa type cards.
-    // When one is found, some basic information such as IDm, PMm, and System Code are retrieved.
-    Serial.print("Waiting for an FeliCa card...  ");
-    ret = nfc.felica_Polling(systemCode, requestCode, idm, pmm, &systemCodeResponse, 5000);
+    if (irq) {
+        // Wait for an FeliCa type cards.
+        // When one is found, some basic information such as IDm, PMm, and System Code are retrieved.
+        Serial.print("Waiting for an FeliCa card...  ");
+        ret = nfc.felica_ReadingCard(systemCode, requestCode, idm, pmm, &systemCodeResponse);
 
-    if (ret != 1) {
-        Serial.println("Could not find a card");
-        delay(500);
-        return;
-    }
-
-    if (memcmp(idm, _prevIDm, 8) == 0) {
-        if ((millis() - _prevTime) < 3000) {
-            Serial.println("Same card");
-            delay(500);
+        if (ret != 1) {
+            Serial.println("Could not find a card");
+            delay(1);
+            nfc.felica_WaitingCard(systemCode, requestCode, idm, pmm, &systemCodeResponse);
+            irq = false;
             return;
         }
+
+        if (memcmp(idm, _prevIDm, 8) == 0) {
+            if ((millis() - _prevTime) < 3000) {
+                Serial.println("Same card");
+                delay(1);
+                nfc.felica_WaitingCard(systemCode, requestCode, idm, pmm, &systemCodeResponse);
+                irq = false;
+                return;
+            }
+        }
+
+        Serial.println("Found a card!");
+        Serial.print("  IDm: ");
+        nfc.PrintHex(idm, 8);
+        Serial.print("  PMm: ");
+        nfc.PrintHex(pmm, 8);
+        Serial.print("  System Code: ");
+        Serial.print(systemCodeResponse, HEX);
+        Serial.print("\n");
+
+        memcpy(_prevIDm, idm, 8);
+        _prevTime = millis();
+
+        uint8_t blockData[4][16];
+        uint16_t serviceCodeList[1];
+        uint16_t blockList[4];
+
+        Serial.print("Read Without Encryption command -> ");
+        serviceCodeList[0] = 0x1A8B;
+        blockList[0] = 0x8000;
+        blockList[1] = 0x8001;
+        blockList[2] = 0x8002;
+        blockList[3] = 0x8003;
+        ret = nfc.felica_ReadWithoutEncryption(1, serviceCodeList, 4, blockList, blockData);
+        if (ret != 1) {
+            Serial.println("error");
+            Serial.printf("  Error code: %d\n", ret);
+        } else {
+            Serial.println("OK!");
+            Serial.print("  Student ID: ");
+            uint32_t student_id = 0;
+            uint32_t keta = 10000000;
+            for (int i = 0; i < 8; i++) {
+                student_id += (blockData[0][6 + i] & 0x0F) * keta;
+                keta /= 10;
+                Serial.printf("%d", blockData[0][6 + i] & 0x0F);
+            }
+            Serial.println();
+            Serial.print("  Name: ");
+            for (int i = 0; i < 16; i++) {
+                Serial.printf("%02X ", blockData[1][i]);
+            }
+            Serial.println();
+            Serial.print("  Period of validity: ");
+            for (int i = 0; i < 8; i++) {
+                Serial.printf("%d", blockData[2][8 + i] & 0x0F);
+            }
+            Serial.print(" - ");
+            for (int i = 0; i < 8; i++) {
+                Serial.printf("%d", blockData[3][i] & 0x0F);
+            }
+            Serial.println();
+        }
+
+        // Wait 1 second before continuing
+        Serial.println("Card access completed!\n");
+        nfc.felica_WaitingCard(systemCode, requestCode, idm, pmm, &systemCodeResponse);
+        irq = false;
     }
-
-    Serial.println("Found a card!");
-    Serial.print("  IDm: ");
-    nfc.PrintHex(idm, 8);
-    Serial.print("  PMm: ");
-    nfc.PrintHex(pmm, 8);
-    Serial.print("  System Code: ");
-    Serial.print(systemCodeResponse, HEX);
-    Serial.print("\n");
-
-    memcpy(_prevIDm, idm, 8);
-    _prevTime = millis();
-
-    uint8_t blockData[4][16];
-    uint16_t serviceCodeList[1];
-    uint16_t blockList[4];
-
-    Serial.print("Read Without Encryption command -> ");
-    serviceCodeList[0] = 0x1A8B;
-    blockList[0] = 0x8000;
-    blockList[1] = 0x8001;
-    blockList[2] = 0x8002;
-    blockList[3] = 0x8003;
-    ret = nfc.felica_ReadWithoutEncryption(1, serviceCodeList, 4, blockList, blockData);
-    if (ret != 1) {
-        Serial.println("error");
-        Serial.printf("  Error code: %d\n", ret);
-    } else {
-        Serial.println("OK!");
-        Serial.print("  Student ID: ");
-        for (int i = 0; i < 8; i++) {
-            Serial.printf("%d", blockData[0][6 + i] & 0x0F);
-        }
-        Serial.println();
-        Serial.print("  Name: ");
-        for (int i = 0; i < 16; i++) {
-            Serial.printf("%02X ", blockData[1][i]);
-        }
-        Serial.println();
-        Serial.print("  Period of validity: ");
-        for (int i = 0; i < 8; i++) {
-            Serial.printf("%d", blockData[2][8 + i] & 0x0F);
-        }
-        Serial.print(" - ");
-        for (int i = 0; i < 8; i++) {
-            Serial.printf("%d", blockData[3][i] & 0x0F);
-        }
-        Serial.println();
-    }
-
-    // Wait 1 second before continuing
-    Serial.println("Card access completed!\n");
-    delay(1000);
+    delay(1);
 }
