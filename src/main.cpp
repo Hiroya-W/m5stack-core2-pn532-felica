@@ -13,6 +13,8 @@
 // #include <PN532/PN532_SPI/PN532_SPI.h>
 #include <PN532/PN532_I2C/PN532_I2C.h>
 
+/* I2Cは sda 32 scl 33 に接続．m5stack core2のデフォルトで Wire は 32, 33 が利用される． */
+
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
 
@@ -47,12 +49,13 @@ PN532 nfc(pn532i2c);
 
 uint8_t _prevIDm[8];
 unsigned long _prevTime = 0;
+unsigned long _prev_keyopen_time = 0;
 
 volatile boolean irq = false;
 Character aquatan = Character(lcd, (unsigned char (*)[4][2048])aqua_bmp);
 
 uint8_t bgmap[8][10] = {
-    {2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
+    {14, 15, 15, 15, 15, 15, 15, 15, 15, 15},
     {2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
     {5, 6, 6, 7, 1, 1, 5, 6, 6, 7},
     {4, 4, 4, 4, 0, 0, 4, 4, 4, 4},
@@ -61,12 +64,14 @@ uint8_t bgmap[8][10] = {
     {3, 3, 3, 10, 13, 13, 11, 3, 3, 3},
     {3, 3, 3, 8, 12, 12, 9, 3, 3, 3}};
 
+// 文字背景色 F3EBD6
+
 /*
 Map background = Map(&lcd, &aquatan, (unsigned char (*)[2048])bgimg);
 int aquatan_speed = 8;
 */
-const unsigned char *wav_list[] = {macstartup};
-const size_t wav_size[] = {sizeof(macstartup)};
+const unsigned char *wav_list[] = {macstartup,se_pi};
+const size_t wav_size[] = {sizeof(macstartup),sizeof(se_pi)};
 
 void InitI2SSpeakerOrMic(int mode) {
     esp_err_t err = ESP_OK;
@@ -126,7 +131,7 @@ void playSound(int type) {
 uint32_t drawBitmap16(unsigned char *data, int16_t x, int16_t y, int16_t w,
                       int16_t h) {
     uint16_t row, col, buffidx = 0;
-
+    lcd->startWrite();
     for (col = 0; col < w; col++) {  // For each scanline...
         for (row = 0; row < h; row++) {
             uint16_t c = pgm_read_word(data + buffidx);
@@ -135,6 +140,7 @@ uint32_t drawBitmap16(unsigned char *data, int16_t x, int16_t y, int16_t w,
             buffidx += 2;
         }  // end pixel
     }
+    lcd->endWrite();
     return 0;
 }
 
@@ -144,11 +150,19 @@ void PrintHex8(const uint8_t d) {
     Serial.print(d & 0x0F, HEX);
 }
 
+void drawMap(uint8_t x, uint8_t y, uint8_t w, uint8_t h) {
+    for (int i = y; i < y+h; i++) {
+        for (int j = x; j < x+w; j++) {
+            drawBitmap16((unsigned char *)bgimg[bgmap[i][j]], j * 32, i * 32, 32, 32);
+        }
+    }
+}
+
 void cardreading() {
     Serial.println("INT");
-//    if ((millis() - _prevTime) > 5000) {
-        irq = true;
-//    }
+    //    if ((millis() - _prevTime) > 5000) {
+    irq = true;
+    //    }
 }
 
 void setup(void) {
@@ -158,17 +172,13 @@ void setup(void) {
     //    Wire1.begin(21,22);
 
     lcd->init();
-    lcd->setFont(&fonts::lgfxJapanGothic_40);
+    lcd->setFont(&fonts::Font2);
     lcd->setBrightness(128);
-    lcd->setCursor(0, 0);
-    lcd->println("Hello World");
+    lcd->setCursor(32, 0);
+//    lcd->println("Hello World");
 
-    drawBitmap16((unsigned char *)bgimg[0], 100, 100, 32, 32);
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 10; j++) {
-            drawBitmap16((unsigned char *)bgimg[bgmap[i][j]], j * 32, i * 32, 32, 32);
-        }
-    }
+    //    drawBitmap16((unsigned char *)bgimg[0], 100, 100, 32, 32);
+    drawMap(0,0,10,8);
     aquatan.start(160 - 32, 120 + 64, ORIENT_FRONT);
 
     Serial.begin(115200);
@@ -212,7 +222,9 @@ void setup(void) {
 
     InitI2SSpeakerOrMic(MODE_MIC);
 }
+
 uint32_t move_prev_millis = 0;
+boolean touch = false;
 
 void loop(void) {
     int8_t ret;
@@ -221,6 +233,23 @@ void loop(void) {
     uint8_t idm[8];
     uint8_t pmm[8];
     uint16_t systemCodeResponse;
+
+    TouchPoint_t pos = M5.Touch.getPressPoint();
+    if (pos.x != -1) {
+        if (!touch) {
+            touch = true;
+            if (pos.x >= 0 && pos.x < 320 && pos.y < 240 && pos.y > 96) {
+                int to_x = pos.x - pos.x % 32;
+                int to_y = pos.y - pos.y % 32;
+                aquatan.queueMoveTo(to_x, to_y, 4, 4);
+                playSound(1);
+            }
+        }
+    } else {
+        if (touch) {
+            touch = false;
+        }
+    }
 
     if (irq) {
         // Wait for an FeliCa type cards.
@@ -280,7 +309,8 @@ void loop(void) {
             Serial.print("  Student ID: ");
             uint32_t student_id = 0;
             uint32_t keta = 10000000;
-            lcd->setCursor(20, 10);
+            lcd->setCursor(32, 0);
+            lcd->setTextColor(TFT_BLACK, lcd->color888(0xF3, 0xEB, 0xD6));
             for (int i = 0; i < 8; i++) {
                 student_id += (blockData[0][6 + i] & 0x0F) * keta;
                 keta /= 10;
@@ -303,10 +333,10 @@ void loop(void) {
                 Serial.printf("%d", blockData[3][i] & 0x0F);
             }
             Serial.println();
-            playSound(0);
+            //            playSound(0);
             aquatan.clearActionQueue();
-            aquatan.queueMoveTo(128, 96, 2, 2);
-//            aquatan.queueAction(STATUS_TOUCH,0,0);
+            aquatan.queueMoveTo(128, 96, 2, 4);
+            aquatan.queueAction(STATUS_TOUCH, 0, 0);
         }
 
         // Wait 1 second before continuing
@@ -340,7 +370,25 @@ void loop(void) {
             }
         }
     }
-    aquatan.dequeueAction();
+    if (aquatan.getStatus() == STATUS_WAIT) {
+        aquatan.sleep();
+        int retval = aquatan.dequeueAction();
+        // 鍵を開けた場合は，扉のmapを床で置き換える
+        if (retval == STATUS_TOUCH) {
+            bgmap[2][4] = bgmap[2][5] = bgmap[3][4] = bgmap[3][5] = 2;
+            drawMap(4,2,2,2);
+            _prev_keyopen_time = millis();
+        }
+    }
+
+    // 一定時間後に扉を復活
+    if (_prev_keyopen_time > 0 && millis() - _prev_keyopen_time > 10000) {
+        _prev_keyopen_time = 0;
+        bgmap[2][4] = bgmap[2][5] = 1;
+        bgmap[3][4] = bgmap[3][5] = 0;
+        drawMap(4,2,2,2);
+        drawMap(0,0,10,1);
+    }
 
     // delay(10);
     int d1 = 0;

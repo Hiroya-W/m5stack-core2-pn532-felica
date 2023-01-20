@@ -190,11 +190,12 @@ void Character::queueMoveTo(uint16_t to_x, uint16_t to_y, uint16_t speed,
   move_queue_last %= SIZE_QUEUE;
 }
 
-void Character::dequeueAction() {
+int Character::dequeueAction() {
+  int retval = -1;
   if (move_queue_idx == move_queue_last)
-    return;
+    return -1;
   if (getOrientTimer() < wait_timer) {
-    return;
+    return -1;
   } else {
     wait_timer = 0;
   }
@@ -204,19 +205,25 @@ void Character::dequeueAction() {
     moveTo(move_queue[move_queue_idx][1], move_queue[move_queue_idx][2]);
     //    Serial.println("move:" + String(move_queue[move_queue_idx][1]) + "," +
     //    String(move_queue[move_queue_idx][2]) );
+    retval = move_queue[move_queue_idx][0] ;
   } else if (move_queue[move_queue_idx][0] == STATUS_WAIT) {
     setOrient(move_queue[move_queue_idx][1]);
     wait_timer = move_queue[move_queue_idx][2];
     //    Serial.println("wait:" + String(move_queue[move_queue_idx][1]) + "," +
     //    String(move_queue[move_queue_idx][2]) );
+    retval = move_queue[move_queue_idx][0] ;
   } else if (move_queue[move_queue_idx][0] == STATUS_TOUCH) {
     setOrient(ORIENT_JUMP);
     wait_timer = 2500;
     setSpeed(4);
     move_diff = 1;
+    update();
+    playSound(0);
+    retval = move_queue[move_queue_idx][0] ;
   }
   move_queue_idx++;
   move_queue_idx %= SIZE_QUEUE;
+  return retval;
 }
 
 void Character::dequeueMoveTo() {
@@ -344,11 +351,11 @@ uint32_t Character::drawSprite(unsigned char *data, uint8_t s) {
   sy = pos_y % height;
   for (int i = 0; i < 3; i++) {
     int bx = i + (pos_x / width);
-    if (bx > 7) 
+    if (bx > 9) 
       break; 
     for (int j = 0; j < 3; j++) {
       int by = j + (pos_y / height);
-      if (by > 7)
+      if (by > 9)
         break;      
       drawBmpOnSprite(sprite,(unsigned char *)bgimg[bgmap[by][bx]],i*32,j*32,32,32);
     }

@@ -54,8 +54,6 @@ enum {
   MOVE_RIGHTBACK
 };
 
-
-
 class Character {
 public:
 //  Character(Arduino_ST7789 *display, unsigned char (*bmp)[4][2048]);
@@ -76,9 +74,9 @@ public:
   void moveTo(uint16_t to_x, uint16_t to_y);
   void queueMoveTo(uint16_t to_x, uint16_t to_y, uint16_t s = 4, uint16_t d = 1);
   void queueAction(uint8_t s, uint16_t p1, uint16_t p2, uint16_t p3 = 0, uint16_t p4 = 0);
-  void queueLight(uint16_t light);
+//  void queueLight(uint16_t light);
   void dequeueMoveTo();
-  void dequeueAction();
+  int dequeueAction();
   void clearActionQueue();
   uint8_t isEmptyQueue();
   void setStatus(uint8_t status);
