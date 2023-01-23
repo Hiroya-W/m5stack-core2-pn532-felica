@@ -90,8 +90,8 @@ uint8_t bgmap[8][10] = {
 
 // 文字背景色 F3EBD6
 
-String ssid = "mowat_g";
-String wifipass = "anthony123";
+String ssid = "";
+String wifipass = "";
 
 HTTPClient http;
 WebServer webServer(80);
