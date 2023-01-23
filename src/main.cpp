@@ -463,7 +463,7 @@ void setup(void) {
     nfc.begin();
     Wire.setClock(50000UL);
 
-    messageBox(0, 0, "SSID: " + String(apSSID));
+    messageBox(0, 16, "Connect SSID: " + String(apSSID));
 
     if (!connectWifi()) {
         WiFi.mode(WIFI_AP);
