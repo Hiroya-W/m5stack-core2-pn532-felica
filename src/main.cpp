@@ -26,16 +26,18 @@
 
     通信速度を50kHzにしないと失敗する．
     Wire.setClock(50000UL);
-
 */
 
 #include <ArduinoOTA.h>
+#include <ArduinoJson.h>
 #include <HTTPClient.h>
+#include <NimBLEDevice.h>
 #include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
-#include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
+#include <DNSServer.h>
+//#include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
 
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
@@ -71,7 +73,6 @@ PN532 nfc(pn532i2c);
 
 uint8_t _prevIDm[8];
 unsigned long _prevTime = 0;
-unsigned long _prev_keyopen_time = 0;
 
 volatile boolean irq = false;
 Character aquatan = Character(lcd, (unsigned char (*)[4][2048])aqua_bmp);
@@ -89,10 +90,27 @@ uint8_t bgmap[8][10] = {
 
 // 文字背景色 F3EBD6
 
+String ssid = "mowat_g";
+String wifipass = "anthony123";
+
 HTTPClient http;
 WebServer webServer(80);
+DNSServer dnsServer;
+const IPAddress apIP(192, 168, 1, 1);
+const char *apSSID = "NFC_LOCK";
+boolean wifi_ap_mode = false;
+
 Preferences prefs;
-WiFiManager wifimanager;
+//WiFiManager wifimanager;
+
+String url_endpoint = "http://192.168.68.17:3000";
+String hostname = "lock302";
+String lock_mac = "c9:bb:1a:73:5d:0f";
+
+NimBLEScan *pBLEScan;
+
+int lock_state = 0;
+int prev_lock_state = 0;
 
 /*
 Map background = Map(&lcd, &aquatan, (unsigned char (*)[2048])bgimg);
@@ -156,6 +174,25 @@ void playSound(int type) {
     M5.Axp.SetSpkEnable(false);
 }
 
+String strLockState[8] = {"Locked","Unlocked","Locking","Unlocking","LockingStop","UnlockingStop","NotFullyLocked"};
+
+// LockのBLE advertisement dataを取得して，鍵の状態を知る．
+class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
+    void onResult(BLEAdvertisedDevice *advertisedDevice) {
+        // Serial.printf("%d: Found %s with RSSI %d \n", millis() -lastAdv, advertisedDevice->getAddress().toString().c_str(), advertisedDevice->getRSSI());
+        if (advertisedDevice->haveManufacturerData() == true) {
+            std::string strManufacturerData = advertisedDevice->getManufacturerData();
+            uint8_t cManufacturerData[100];
+            strManufacturerData.copy((char *)cManufacturerData, strManufacturerData.length(), 0);
+            if (strManufacturerData[0] == 0x69 && strManufacturerData[1] == 0x09) {
+                Serial.printf("strManufacturerData: %d ", strManufacturerData.length());
+                lock_state = strManufacturerData[9] >> 4 & 0x07;
+                Serial.printf("lock_state = %s\n",strLockState[lock_state]);
+            }
+        }
+    }
+};
+
 uint32_t drawBitmap16(unsigned char *data, int16_t x, int16_t y, int16_t w,
                       int16_t h) {
     uint16_t row, col, buffidx = 0;
@@ -208,6 +245,175 @@ void messageBox(int x, int y, String message) {
     img->deleteSprite();
 }
 
+void handleStatus() {
+  String message = "", argname, argv;
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject &json = jsonBuffer.createObject();
+
+  json["lock_state"] = lock_state;
+  json.printTo(message);
+  webServer.send(200, "application/json", message);
+}
+
+void handleConfig() {
+  String message, argname, argv;
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject &json = jsonBuffer.createObject();
+
+  for (int i = 0; i < webServer.args(); i++) {
+    argname = webServer.argName(i);
+    argv = webServer.arg(i);
+
+    if (argname == "hostname") {
+      hostname = argv;
+      prefs.putString("hostname", hostname);
+      WiFi.setHostname(hostname.c_str());
+    } else if (argname == "lockmac") {
+      lock_mac = argv;
+      prefs.putString("lock_mac", lock_mac);
+    } else if (argname == "url_endpoint") {
+      url_endpoint = argv;
+      prefs.putString("url_endpoint", url_endpoint);
+    }
+  }
+
+  json["hostname"] = hostname;
+  json["url_endpoint"] = url_endpoint;
+  json["lock_mac"] = lock_mac;
+  json.printTo(message);
+  webServer.send(200, "application/json", message);
+}
+
+void handleReboot() {
+  String message;
+  message = "{reboot:\"done\"}";
+  webServer.send(200, "application/json", message);
+  delay(500);
+  ESP.restart();
+  while (1) {
+    delay(0);
+  }
+}
+
+String makePage(String title, String contents) {
+  String s = R"=====(
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="/pure.css">
+)=====";
+  s += "<title>";
+  s += title;
+  s += "</title></head><body>";
+  s += contents;
+  s += R"=====(
+<div class="footer l-box">
+<p>Smart Christmas tree by @omzn</p>
+</div>
+)=====";
+  s += "</body></html>";
+  return s;
+}
+
+void startWebServer() {
+  webServer.on("/", handleStatus);
+  webServer.on("/reboot", handleReboot);
+  webServer.on("/status", handleStatus);
+  webServer.on("/config", handleConfig);
+  webServer.begin();
+}
+
+void startWebServer_ap() {
+  webServer.on("/setap", []() {
+    ssid = webServer.arg("ssid");
+    wifipass = webServer.arg("pass");
+    hostname = webServer.arg("site");
+    prefs.putString("hostname", hostname);
+    prefs.putString("ssid", ssid);
+    prefs.putString("wifipass", wifipass);
+
+    String s = "<h2>Setup complete</h2><p>Device will be connected to \"";
+    s += ssid;
+    s += "\" after restart.</p><p>Your computer also need to re-connect to "
+         "\"";
+    s += ssid;
+    s += R"=====(
+".</p><p><button class="pure-button" onclick="return quitBox();">Close</button></p>
+<script>function quitBox() { open(location, '_self').close();return false;};setTimeout("quitBox()",10000);</script>
+)=====";
+    webServer.send(200, "text/html", makePage("Wi-Fi Settings", s));
+    ESP.restart();
+    while (1) {
+      delay(0);
+    }
+  });
+  webServer.onNotFound([]() {
+    int n = WiFi.scanNetworks();
+    delay(100);
+    String ssidList = "";
+    for (int i = 0; i < n; ++i) {
+      ssidList += "<option value=\"";
+      ssidList += WiFi.SSID(i);
+      ssidList += "\">";
+      ssidList += WiFi.SSID(i);
+      ssidList += "</option>";
+    }
+    String s = R"=====(
+<div class="l-content">
+<div class="l-box">
+<h3 class="if-head">WiFi Setting</h3>
+<p>Please enter your password by selecting the SSID.<br />
+You can specify site name for accessing a name like http://aquamonitor.local/</p>
+<form class="pure-form pure-form-stacked" method="get" action="setap" name="tm"><label for="ssid">SSID: </label>
+<select id="ssid" name="ssid">
+)=====";
+    s += ssidList;
+    s += R"=====(
+</select>
+<label for="pass">Password: </label><input id="pass" name="pass" length=64 type="password">
+<label for="site" >Site name: </label><input id="site" name="site" length=32 type="text" placeholder="Site name">
+<button class="pure-button pure-button-primary" type="submit">Submit</button></form>
+</div>
+</div>
+)=====";
+    webServer.send(200, "text/html", makePage("Wi-Fi Settings", s));
+  });
+  webServer.begin();
+}
+
+
+boolean connectWifi(){
+  boolean state = true;
+  int i = 0;
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid.c_str(), wifipass.c_str());
+  Serial.println("Connecting to WiFi");
+
+  // Wait for connection
+  Serial.print("Connecting...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+    if (i > 20){
+      state = false; break;
+    }
+    i++;
+  }
+  Serial.println("");
+  if (state){
+    Serial.print("Connected to ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+  }
+  else {
+    Serial.println("Connection failed.");
+  }
+  return state;
+}
 
 void cardreading() {
     Serial.println("INT");
@@ -220,8 +426,13 @@ void setup(void) {
     // put your setup code here, to run once:
     pinMode(PIN_PN532_IRQ, INPUT_PULLUP);
     M5.begin();
-    //    Wire1.begin(21,22);
+
     prefs.begin("aquatan", false);
+    hostname = prefs.getString("hostname", hostname);
+    url_endpoint = prefs.getString("url_endpoint", url_endpoint);
+    lock_mac = prefs.getString("lock_mac", lock_mac);
+    ssid = prefs.getString("ssid", ssid);
+    wifipass = prefs.getString("wifipass", wifipass);
 
     lcd->init();
     lcd->setFont(&fonts::Font2);
@@ -234,23 +445,40 @@ void setup(void) {
     // drawMap(0,0,10,8);
     bg.drawEntireMap();
 
-
     aquatan.start(160 - 32, 120 + 64, ORIENT_FRONT);
     aquatan.setMap(&bg);
 
     Serial.begin(115200);
     Serial.println("Hello!");
+
+    NimBLEAddress lock_addr(lock_mac.c_str(), 1);
+
+    NimBLEDevice::init("");
+    NimBLEDevice::whiteListAdd(lock_addr);
+    pBLEScan = NimBLEDevice::getScan();
+    pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks(), true);
+    pBLEScan->setFilterPolicy(BLE_HCI_SCAN_FILT_USE_WL);
+    pBLEScan->setMaxResults(0); // do not store the scan results, use callback only.
+
     nfc.begin();
     Wire.setClock(50000UL);
 
-    messageBox(0,0,"SSID: nfclock");
+    messageBox(0, 0, "SSID: " + String(apSSID));
 
-    wifimanager.autoConnect("nfclock");
+    if (!connectWifi()) {
+        WiFi.mode(WIFI_AP);
+        Serial.println("Wifi AP mode");
+        WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+        WiFi.softAP(apSSID);
+        dnsServer.start(53, "*", apIP);
+        wifi_ap_mode = true;
+    }
     WiFi.setSleep(false);
 
-    bg.drawMap(0,0,10,2);
+    bg.drawMap(0, 0, 10, 2);
 
-    ArduinoOTA.setHostname("nfclock1");
+
+    ArduinoOTA.setHostname(hostname.c_str());
     ArduinoOTA
         .onStart([]() {
             String type;
@@ -319,7 +547,13 @@ void setup(void) {
     nfc.felica_WaitingCard(systemCode, requestCode, idm, pmm, &systemCodeResponse);
     attachInterrupt(PIN_PN532_IRQ, cardreading, FALLING);
 
+
     InitI2SSpeakerOrMic(MODE_MIC);
+    if (wifi_ap_mode) {
+        startWebServer();
+    } else {
+        startWebServer_ap();
+    }
 }
 
 uint32_t move_prev_millis = 0;
@@ -333,7 +567,17 @@ void loop(void) {
     uint8_t pmm[8];
     uint16_t systemCodeResponse;
 
-    ArduinoOTA.handle();
+    webServer.handleClient();
+    if (wifi_ap_mode) {
+        dnsServer.processNextRequest();
+        return;
+    } else {
+        ArduinoOTA.handle();
+    }
+
+    if(pBLEScan->isScanning() == false) {
+        pBLEScan->start(0, nullptr, false);
+    }
 
     TouchPoint_t pos = M5.Touch.getPressPoint();
     if (pos.x != -1) {
@@ -415,13 +659,13 @@ void loop(void) {
                 student_id += (blockData[0][6 + i] & 0x0F) * keta;
                 keta /= 10;
                 Serial.printf("%d", blockData[0][6 + i] & 0x0F);
-                str_student_id += (char)blockData[0][6 + i] ;
+                str_student_id += (char)blockData[0][6 + i];
             }
             Serial.println();
 
-            messageBox(0,0,str_student_id);
+            messageBox(0, 0, str_student_id);
 
-//            lcd->printf("%08d", student_id);
+            //            lcd->printf("%08d", student_id);
             playSound(2);
 
             Serial.print("  Name: ");
@@ -490,22 +734,19 @@ void loop(void) {
     }
     if (aquatan.getStatus() == STATUS_WAIT) {
         aquatan.sleep();
-        int retval = aquatan.dequeueAction();
-        // 鍵を開けた場合は，扉のmapを床で置き換える
-        if (retval == STATUS_TOUCH) {
-            bgmap[2][4] = bgmap[2][5] = bgmap[3][4] = bgmap[3][5] = 2;
-            bg.drawMap(4, 2, 2, 2);
-            _prev_keyopen_time = millis();
-        }
+        aquatan.dequeueAction();
     }
 
-    // 一定時間後に扉を復活
-    if (_prev_keyopen_time > 0 && millis() - _prev_keyopen_time > 10000) {
-        _prev_keyopen_time = 0;
-        bgmap[2][4] = bgmap[2][5] = 1;
-        bgmap[3][4] = bgmap[3][5] = 0;
+    // 鍵を開けた場合は，扉のmapを床で置き換える
+    if (lock_state != prev_lock_state) {
+        if (lock_state == 0) { // locked
+            bgmap[2][4] = bgmap[2][5] = 1;
+            bgmap[3][4] = bgmap[3][5] = 0;
+        } else if (lock_state == 1) { // unlocked
+            bgmap[2][4] = bgmap[2][5] = 2;
+            bgmap[3][4] = bgmap[3][5] = 2;
+        }
         bg.drawMap(4, 2, 2, 2);
-        bg.drawMap(0, 0, 10, 2);
     }
 
     // delay(10);
