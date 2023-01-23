@@ -1,5 +1,3 @@
-// 効果音：ポケットサウンド – https://pocket-se.info/
-
 #include <M5Core2.h>
 
 #define LGFX_M5STACK_CORE2
@@ -13,7 +11,31 @@
 // #include <PN532/PN532_SPI/PN532_SPI.h>
 #include <PN532/PN532_I2C/PN532_I2C.h>
 
-/* I2Cは sda 32 scl 33 に接続．m5stack core2のデフォルトで Wire は 32, 33 が利用される． */
+/* 配線図
+  PN532      M5Stack Core2
+
+   SDA        32
+   SCL        33
+   VCC        3.3V
+   GND        GND
+   IRQ        19
+*/
+
+/* I2Cは sda 32 scl 33 に接続．
+   m5stack core2のデフォルトで Wire は 32, 33 が利用される．
+
+    通信速度を50kHzにしないと失敗する．
+    Wire.setClock(50000UL);
+
+*/
+
+#include <ArduinoOTA.h>
+#include <HTTPClient.h>
+#include <Preferences.h>
+#include <WebServer.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
 
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
@@ -21,8 +43,9 @@
 /*
 #include "Map.h"
 */
+#include "Character.h"
+#include "Map.h"
 #include "bitmaps.h"
-#include "character.h"
 #include "sound.h"
 
 #define CONFIG_I2S_BCK_PIN 12
@@ -39,8 +62,7 @@
 #define PIN_PN532_IRQ (19)
 
 // static LGFX *lcd = &(M5.Lcd);
-static LGFX lcd0;
-static LGFX *lcd = &lcd0;
+static LGFX *lcd = new LGFX();
 
 // PN532_SPI pn532spi(SPI, PIN_SPI_SS);
 // PN532 nfc(pn532spi);
@@ -53,6 +75,7 @@ unsigned long _prev_keyopen_time = 0;
 
 volatile boolean irq = false;
 Character aquatan = Character(lcd, (unsigned char (*)[4][2048])aqua_bmp);
+Map bg = Map(lcd, 10, 8, (unsigned char (*)[2048])bgimg);
 
 uint8_t bgmap[8][10] = {
     {14, 15, 15, 15, 15, 15, 15, 15, 15, 15},
@@ -66,12 +89,17 @@ uint8_t bgmap[8][10] = {
 
 // 文字背景色 F3EBD6
 
+HTTPClient http;
+WebServer webServer(80);
+Preferences prefs;
+WiFiManager wifimanager;
+
 /*
 Map background = Map(&lcd, &aquatan, (unsigned char (*)[2048])bgimg);
 int aquatan_speed = 8;
 */
-const unsigned char *wav_list[] = {macstartup,se_pi};
-const size_t wav_size[] = {sizeof(macstartup),sizeof(se_pi)};
+const unsigned char *wav_list[] = {macstartup, se_pi, se_pu};
+const size_t wav_size[] = {sizeof(macstartup), sizeof(se_pi), sizeof(se_pu)};
 
 void InitI2SSpeakerOrMic(int mode) {
     esp_err_t err = ESP_OK;
@@ -150,13 +178,36 @@ void PrintHex8(const uint8_t d) {
     Serial.print(d & 0x0F, HEX);
 }
 
+// 指定した範囲のmapを描画する．
 void drawMap(uint8_t x, uint8_t y, uint8_t w, uint8_t h) {
-    for (int i = y; i < y+h; i++) {
-        for (int j = x; j < x+w; j++) {
+    lcd->startWrite();
+    for (int i = y; i < y + h; i++) {
+        for (int j = x; j < x + w; j++) {
             drawBitmap16((unsigned char *)bgimg[bgmap[i][j]], j * 32, i * 32, 32, 32);
         }
     }
+    lcd->endWrite();
 }
+
+void messageBox(int x, int y, String message) {
+    LGFX_Sprite *img;
+    img = new LGFX_Sprite(lcd);
+    img->setColorDepth(16);
+    img->createSprite(320, 64);
+    img->fillSprite(TFT_TRANSPARENT);
+
+    img->fillRoundRect(0, 0, 320, 64, 5, TFT_NAVY);
+    img->drawRoundRect(0, 0, 320, 64, 5, TFT_WHITE);
+    img->drawRoundRect(1, 1, 318, 62, 5, TFT_WHITE);
+    img->setFont(&fonts::Font4);
+    img->setTextColor(TFT_WHITE);
+
+    img->drawString(message, img->width() / 2 - img->textWidth(message) / 2, 2);
+
+    img->pushSprite(x, y, TFT_TRANSPARENT);
+    img->deleteSprite();
+}
+
 
 void cardreading() {
     Serial.println("INT");
@@ -170,25 +221,73 @@ void setup(void) {
     pinMode(PIN_PN532_IRQ, INPUT_PULLUP);
     M5.begin();
     //    Wire1.begin(21,22);
+    prefs.begin("aquatan", false);
 
     lcd->init();
     lcd->setFont(&fonts::Font2);
     lcd->setBrightness(128);
-    lcd->setCursor(32, 0);
-//    lcd->println("Hello World");
+    lcd->setCursor(10, 0);
+    //    lcd->println("Hello World");
 
+    bg.setMapData(bgmap);
     //    drawBitmap16((unsigned char *)bgimg[0], 100, 100, 32, 32);
-    drawMap(0,0,10,8);
+    // drawMap(0,0,10,8);
+    bg.drawEntireMap();
+
+
     aquatan.start(160 - 32, 120 + 64, ORIENT_FRONT);
+    aquatan.setMap(&bg);
 
     Serial.begin(115200);
     Serial.println("Hello!");
     nfc.begin();
     Wire.setClock(50000UL);
 
+    messageBox(0,0,"SSID: nfclock");
+
+    wifimanager.autoConnect("nfclock");
+    WiFi.setSleep(false);
+
+    bg.drawMap(0,0,10,2);
+
+    ArduinoOTA.setHostname("nfclock1");
+    ArduinoOTA
+        .onStart([]() {
+            String type;
+            if (ArduinoOTA.getCommand() == U_FLASH)
+                type = "sketch";
+            else  // U_SPIFFS
+                type = "filesystem";
+            // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS
+            // using SPIFFS.end()
+            Serial.println("Start updating " + type);
+        })
+        .onEnd([]() {
+            Serial.println("\nEnd");
+        })
+        .onProgress([](unsigned int progress, unsigned int total) {
+            Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+        })
+        .onError([](ota_error_t error) {
+            Serial.printf("Error[%u]: ", error);
+            if (error == OTA_AUTH_ERROR)
+                Serial.println("Auth Failed");
+            else if (error == OTA_BEGIN_ERROR)
+                Serial.println("Begin Failed");
+            else if (error == OTA_CONNECT_ERROR)
+                Serial.println("Connect Failed");
+            else if (error == OTA_RECEIVE_ERROR)
+                Serial.println("Receive Failed");
+            else if (error == OTA_END_ERROR)
+                Serial.println("End Failed");
+        });
+    ArduinoOTA.begin();
+
     uint32_t versiondata = nfc.getFirmwareVersion();
     if (!versiondata) {
         Serial.print("Didn't find PN53x board");
+        lcd->setCursor(10, 0);
+        lcd->println("Didn't find PN53x board");
         while (1) {
             delay(10);
         };  // halt
@@ -234,6 +333,8 @@ void loop(void) {
     uint8_t pmm[8];
     uint16_t systemCodeResponse;
 
+    ArduinoOTA.handle();
+
     TouchPoint_t pos = M5.Touch.getPressPoint();
     if (pos.x != -1) {
         if (!touch) {
@@ -266,7 +367,7 @@ void loop(void) {
         }
 
         if (memcmp(idm, _prevIDm, 8) == 0) {
-            if ((millis() - _prevTime) < 6000) {
+            if ((millis() - _prevTime) < 10000) {
                 Serial.println("Same card");
                 delay(1);
                 nfc.felica_WaitingCard(systemCode, requestCode, idm, pmm, &systemCodeResponse);
@@ -308,16 +409,20 @@ void loop(void) {
             Serial.println("OK!");
             Serial.print("  Student ID: ");
             uint32_t student_id = 0;
+            String str_student_id = "";
             uint32_t keta = 10000000;
-            lcd->setCursor(32, 0);
-            lcd->setTextColor(TFT_BLACK, lcd->color888(0xF3, 0xEB, 0xD6));
             for (int i = 0; i < 8; i++) {
                 student_id += (blockData[0][6 + i] & 0x0F) * keta;
                 keta /= 10;
                 Serial.printf("%d", blockData[0][6 + i] & 0x0F);
-                lcd->printf("%d", blockData[0][6 + i] & 0x0F);
+                str_student_id += (char)blockData[0][6 + i] ;
             }
             Serial.println();
+
+            messageBox(0,0,str_student_id);
+
+//            lcd->printf("%08d", student_id);
+            playSound(2);
 
             Serial.print("  Name: ");
             for (int i = 0; i < 16; i++) {
@@ -333,6 +438,19 @@ void loop(void) {
                 Serial.printf("%d", blockData[3][i] & 0x0F);
             }
             Serial.println();
+
+            /* student_id が valid かどうかを labapi に問い合わせ */
+
+            /* もし idm が返ってきたら idm も比較して不一致なら NG */
+
+            /* idmが返ってこない場合にはidmを登録 */
+
+            /* student id が valid なら switchbot apiに解錠を送る．*/
+
+            // use switchbot lock api here
+            // getlockstate()
+            //
+
             //            playSound(0);
             aquatan.clearActionQueue();
             aquatan.queueMoveTo(128, 96, 2, 4);
@@ -376,7 +494,7 @@ void loop(void) {
         // 鍵を開けた場合は，扉のmapを床で置き換える
         if (retval == STATUS_TOUCH) {
             bgmap[2][4] = bgmap[2][5] = bgmap[3][4] = bgmap[3][5] = 2;
-            drawMap(4,2,2,2);
+            bg.drawMap(4, 2, 2, 2);
             _prev_keyopen_time = millis();
         }
     }
@@ -386,12 +504,13 @@ void loop(void) {
         _prev_keyopen_time = 0;
         bgmap[2][4] = bgmap[2][5] = 1;
         bgmap[3][4] = bgmap[3][5] = 0;
-        drawMap(4,2,2,2);
-        drawMap(0,0,10,1);
+        bg.drawMap(4, 2, 2, 2);
+        bg.drawMap(0, 0, 10, 2);
     }
 
     // delay(10);
     int d1 = 0;
+    //    d1 += bg.update();
     d1 += aquatan.update();
     //    d1 += background.update();
     int dd = (1000 / FPS) - d1 > 0 ? (1000 / FPS) - d1 : 1;

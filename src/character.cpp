@@ -1,4 +1,4 @@
-#include "character.h"
+#include "Character.h"
 //#include "util.h"
 
 Character::Character(LGFX *display, unsigned char (*bmp)[4][2048]) {
@@ -45,8 +45,16 @@ void Character::sleep() {
     setSpeed(8);
   }
 }
+
+void Character::setMap(Map *m) {
+  map = m;
+}
+
 int16_t Character::current_x() { return pos_x; }
 int16_t Character::current_y() { return pos_y; }
+
+int Character::current_width() { return width; }
+int Character::current_height() { return height; }
 
 void Character::setSpeed(uint8_t s) {
   if (s > 0) {
@@ -344,11 +352,21 @@ uint32_t Character::drawSprite(unsigned char *data, uint8_t s) {
   if ((pos_x >= tft->width()) || (pos_y >= tft->height())) {
     return 0;
   }
+
   sprite->createSprite(width * 3, height * 3);
   fx = (pos_x / width) * width; // absolute position of sprite
   fy = (pos_y / height) * height;
   sx = pos_x % width; // relative position of drawing in the sprite
   sy = pos_y % height;
+
+  // キャラクターの周囲のマップを描画する．
+
+/*
+  int bx = (pos_x / width);
+  int by = (pos_y / height);
+  map->drawMap(sprite,bx,by,3,3);
+*/
+///*
   for (int i = 0; i < 3; i++) {
     int bx = i + (pos_x / width);
     if (bx > 9) 
@@ -360,7 +378,10 @@ uint32_t Character::drawSprite(unsigned char *data, uint8_t s) {
       drawBmpOnSprite(sprite,(unsigned char *)bgimg[bgmap[by][bx]],i*32,j*32,32,32);
     }
   }
+//*/
+
   //sprite->fillSprite(SCREEN_BGCOLOR);
+  //sprite->fillSprite(TFT_TRANSPARENT);
   for (col = 0; col < width; col++) { // For each scanline...
     for (row = 0; row < height; row++) {
       uint16_t c = pgm_read_word(data + buffidx);

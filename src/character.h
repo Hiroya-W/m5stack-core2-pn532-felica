@@ -1,6 +1,11 @@
 #ifndef CHARACTER_H
 #define CHARACTER_H
 
+/* Character class 
+   アニメーションするキャラクタを描画するクラス．
+
+*/
+
 #include "Arduino.h"
 #include "bitmaps.h"
 //#include "util.h"
@@ -10,7 +15,7 @@
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
 //#include <M5Core2.h>
-
+#include "Map.h"
 //#define LGFX M5Display
 //#define LGFX_Sprite TFT_eSprite
 
@@ -19,7 +24,7 @@
 //#include <Fonts/FreeSansBold18pt7b.h>
 
 // 20 frames per second
-#define FPS 20
+#define FPS 24
 #define SIZE_QUEUE 30
 
 #define HOME_X 120-32
@@ -62,8 +67,11 @@ public:
   void start(uint16_t x, uint16_t y, uint8_t o);
   void stop(uint8_t o);
   void sleep();
+  void setMap(Map *m);
   int16_t current_x();
   int16_t current_y();
+  int current_width();
+  int current_height();
   void setSpeed(uint8_t s);
   void incSpeed();
   void decSpeed();
@@ -86,6 +94,7 @@ public:
 protected:
   LGFX *tft;
   LGFX_Sprite *sprite;
+  Map *map;
   unsigned char (*image)[4][2048];
   int16_t move_queue[SIZE_QUEUE][5];
   int16_t move_queue_idx;
