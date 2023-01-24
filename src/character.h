@@ -34,8 +34,8 @@
 #define TIME_SLEEP    60000
 #define TIME_TFTSLEEP 60000
 
-#define BLACK TFT_BLACK
-#define WHITE TFT_WHITE
+//#define BLACK TFT_BLACK
+//#define WHITE TFT_WHITE
 #define SCREEN_BGCOLOR TFT_NAVY
 
 void InitI2SSpeakerOrMic(int mode);

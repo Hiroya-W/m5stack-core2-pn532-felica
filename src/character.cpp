@@ -226,7 +226,6 @@ int Character::dequeueAction() {
     setSpeed(4);
     move_diff = 1;
     update();
-    playSound(0);
     retval = move_queue[move_queue_idx][0] ;
   }
   move_queue_idx++;

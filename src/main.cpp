@@ -28,16 +28,16 @@
     Wire.setClock(50000UL);
 */
 
-#include <ArduinoOTA.h>
 #include <ArduinoJson.h>
+#include <ArduinoOTA.h>
+#include <DNSServer.h>
 #include <HTTPClient.h>
 #include <NimBLEDevice.h>
 #include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
-#include <DNSServer.h>
-//#include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
+// #include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
 
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
@@ -63,8 +63,7 @@
 #define PIN_SPI_SS (27)
 #define PIN_PN532_IRQ (19)
 
-// static LGFX *lcd = &(M5.Lcd);
-static LGFX *lcd = new LGFX();
+/* PN53X variables */
 
 // PN532_SPI pn532spi(SPI, PIN_SPI_SS);
 // PN532 nfc(pn532spi);
@@ -74,7 +73,18 @@ PN532 nfc(pn532i2c);
 uint8_t _prevIDm[8];
 unsigned long _prevTime = 0;
 
+uint16_t systemCode = 0xFE00;
+uint8_t requestCode = 0x01;  // System Code request
+uint8_t idm[8];
+uint8_t pmm[8];
+uint16_t systemCodeResponse;
 volatile boolean irq = false;
+
+/* LCD variables */
+
+// static LGFX *lcd = &(M5.Lcd);
+static LGFX *lcd = new LGFX();
+
 Character aquatan = Character(lcd, (unsigned char (*)[4][2048])aqua_bmp);
 Map bg = Map(lcd, 10, 8, (unsigned char (*)[2048])bgimg);
 
@@ -88,36 +98,50 @@ uint8_t bgmap[8][10] = {
     {3, 3, 3, 10, 13, 13, 11, 3, 3, 3},
     {3, 3, 3, 8, 12, 12, 9, 3, 3, 3}};
 
-// 文字背景色 F3EBD6
-
-String ssid = "";
-String wifipass = "";
+/* WiFi & net variables*/
 
 HTTPClient http;
+WiFiClient client;
 WebServer webServer(80);
 DNSServer dnsServer;
 const IPAddress apIP(192, 168, 1, 1);
 const char *apSSID = "NFC_LOCK";
 boolean wifi_ap_mode = false;
 
-Preferences prefs;
-//WiFiManager wifimanager;
+String url_apiserver = "http://192.168.3.192:3001";
+int use_postdb = 1;
 
+/* Preferences */
+
+Preferences prefs;
 String url_endpoint = "http://192.168.68.17:3000";
 String hostname = "lock302";
 String lock_mac = "c9:bb:1a:73:5d:0f";
+String ssid = "hogehoge";
+String wifipass = "foobar";
+String room_name = "8-302";
+
+/* BLE variables */
 
 NimBLEScan *pBLEScan;
 
 int lock_state = 0;
 int prev_lock_state = 0;
+String strLockState[8] = {"Locked", "Unlocked", "Locking", "Unlocking", "LockingStop", "UnlockingStop", "NotFullyLocked"};
 
-/*
-Map background = Map(&lcd, &aquatan, (unsigned char (*)[2048])bgimg);
-int aquatan_speed = 8;
-*/
-const unsigned char *wav_list[] = {macstartup, se_pi, se_pu};
-const size_t wav_size[] = {sizeof(macstartup), sizeof(se_pi), sizeof(se_pu)};
+/* Switchbot api */
+
+String switchbot_token;
+String switchbot_secret;
+
+/* Sounds */
+
+enum { SE_MAC = 0,
+       SE_PI,
+       SE_PO,
+       SE_PU };
+const unsigned char *wav_list[] = {macstartup, se_pi, se_pu, se_po};
+const size_t wav_size[] = {sizeof(macstartup), sizeof(se_pi), sizeof(se_pu), sizeof(se_po)};
 
 void InitI2SSpeakerOrMic(int mode) {
     esp_err_t err = ESP_OK;
@@ -174,8 +198,6 @@ void playSound(int type) {
     M5.Axp.SetSpkEnable(false);
 }
 
-String strLockState[8] = {"Locked","Unlocked","Locking","Unlocking","LockingStop","UnlockingStop","NotFullyLocked"};
-
 // LockのBLE advertisement dataを取得して，鍵の状態を知る．
 class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
     void onResult(BLEAdvertisedDevice *advertisedDevice) {
@@ -185,9 +207,9 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
             uint8_t cManufacturerData[100];
             strManufacturerData.copy((char *)cManufacturerData, strManufacturerData.length(), 0);
             if (strManufacturerData[0] == 0x69 && strManufacturerData[1] == 0x09) {
-                Serial.printf("strManufacturerData: %d ", strManufacturerData.length());
+                //                Serial.printf("strManufacturerData: %d ", strManufacturerData.length());
                 lock_state = strManufacturerData[9] >> 4 & 0x07;
-                Serial.printf("lock_state = %s\n",strLockState[lock_state]);
+                //                Serial.printf("lock_state = %s\n", strLockState[lock_state]);
             }
         }
     }
@@ -207,12 +229,6 @@ uint32_t drawBitmap16(unsigned char *data, int16_t x, int16_t y, int16_t w,
     }
     lcd->endWrite();
     return 0;
-}
-
-void PrintHex8(const uint8_t d) {
-    Serial.print(" ");
-    Serial.print((d >> 4) & 0x0F, HEX);
-    Serial.print(d & 0x0F, HEX);
 }
 
 // 指定した範囲のmapを描画する．
@@ -239,64 +255,76 @@ void messageBox(int x, int y, String message) {
     img->setFont(&fonts::Font4);
     img->setTextColor(TFT_WHITE);
 
-    img->drawString(message, img->width() / 2 - img->textWidth(message) / 2, 2);
+    img->drawString(message, img->width() / 2 - img->textWidth(message) / 2, img->height() / 2 - img->fontHeight() / 2);
 
     img->pushSprite(x, y, TFT_TRANSPARENT);
     img->deleteSprite();
 }
 
 void handleStatus() {
-  String message = "", argname, argv;
-  DynamicJsonBuffer jsonBuffer;
-  JsonObject &json = jsonBuffer.createObject();
+    String message = "", argname, argv;
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject &json = jsonBuffer.createObject();
 
-  json["lock_state"] = lock_state;
-  json.printTo(message);
-  webServer.send(200, "application/json", message);
+    json["lock_state"] = lock_state;
+    json.printTo(message);
+    webServer.send(200, "application/json", message);
 }
 
 void handleConfig() {
-  String message, argname, argv;
-  DynamicJsonBuffer jsonBuffer;
-  JsonObject &json = jsonBuffer.createObject();
+    String message, argname, argv;
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject &json = jsonBuffer.createObject();
 
-  for (int i = 0; i < webServer.args(); i++) {
-    argname = webServer.argName(i);
-    argv = webServer.arg(i);
+    for (int i = 0; i < webServer.args(); i++) {
+        argname = webServer.argName(i);
+        argv = webServer.arg(i);
 
-    if (argname == "hostname") {
-      hostname = argv;
-      prefs.putString("hostname", hostname);
-      WiFi.setHostname(hostname.c_str());
-    } else if (argname == "lockmac") {
-      lock_mac = argv;
-      prefs.putString("lock_mac", lock_mac);
-    } else if (argname == "url_endpoint") {
-      url_endpoint = argv;
-      prefs.putString("url_endpoint", url_endpoint);
+        if (argname == "hostname") {
+            hostname = argv;
+            prefs.putString("hostname", hostname);
+            WiFi.setHostname(hostname.c_str());
+        } else if (argname == "lock_mac") {
+            NimBLEAddress old_lock_addr(lock_mac.c_str(), 1);
+            NimBLEDevice::whiteListRemove(old_lock_addr);
+            lock_mac = argv;
+            prefs.putString("lock_mac", lock_mac);
+            NimBLEAddress new_lock_addr(lock_mac.c_str(), 1);
+            NimBLEDevice::whiteListAdd(new_lock_addr);
+        } else if (argname == "ssid") {
+            ssid = argv;
+            prefs.putString("ssid", ssid);
+        } else if (argname == "wifipass") {
+            wifipass = argv;
+            prefs.putString("wifipass", wifipass);
+        } else if (argname == "url_apiserver") {
+            url_apiserver = argv;
+            prefs.putString("url_apiserver", url_apiserver);
+        }
     }
-  }
 
-  json["hostname"] = hostname;
-  json["url_endpoint"] = url_endpoint;
-  json["lock_mac"] = lock_mac;
-  json.printTo(message);
-  webServer.send(200, "application/json", message);
+    json["hostname"] = hostname;
+    json["url_apiserver"] = url_apiserver;
+    json["lock_mac"] = lock_mac;
+    json["ssid"] = ssid;
+    json["wifipass"] = "******";
+    json.printTo(message);
+    webServer.send(200, "application/json", message);
 }
 
 void handleReboot() {
-  String message;
-  message = "{reboot:\"done\"}";
-  webServer.send(200, "application/json", message);
-  delay(500);
-  ESP.restart();
-  while (1) {
-    delay(0);
-  }
+    String message;
+    message = "{reboot:\"done\"}";
+    webServer.send(200, "application/json", message);
+    delay(500);
+    ESP.restart();
+    while (1) {
+        delay(0);
+    }
 }
 
 String makePage(String title, String contents) {
-  String s = R"=====(
+    String s = R"=====(
 <!doctype html>
 <html lang="en">
 <head>
@@ -304,63 +332,64 @@ String makePage(String title, String contents) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="/pure.css">
 )=====";
-  s += "<title>";
-  s += title;
-  s += "</title></head><body>";
-  s += contents;
-  s += R"=====(
+    s += "<title>";
+    s += title;
+    s += "</title></head><body>";
+    s += contents;
+    s += R"=====(
 <div class="footer l-box">
-<p>Smart Christmas tree by @omzn</p>
+<p>WiFiManager Lite by @omzn</p>
 </div>
 )=====";
-  s += "</body></html>";
-  return s;
+    s += "</body></html>";
+    return s;
 }
 
 void startWebServer() {
-  webServer.on("/", handleStatus);
-  webServer.on("/reboot", handleReboot);
-  webServer.on("/status", handleStatus);
-  webServer.on("/config", handleConfig);
-  webServer.begin();
+    webServer.on("/", handleStatus);
+    webServer.on("/reboot", handleReboot);
+    webServer.on("/status", handleStatus);
+    webServer.on("/config", handleConfig);
+    webServer.begin();
 }
 
 void startWebServer_ap() {
-  webServer.on("/setap", []() {
-    ssid = webServer.arg("ssid");
-    wifipass = webServer.arg("pass");
-    hostname = webServer.arg("site");
-    prefs.putString("hostname", hostname);
-    prefs.putString("ssid", ssid);
-    prefs.putString("wifipass", wifipass);
+    //  webServer.on("/pure.css", handleCss);
+    webServer.on("/setap", []() {
+        ssid = webServer.arg("ssid");
+        wifipass = webServer.arg("pass");
+        hostname = webServer.arg("site");
+        prefs.putString("hostname", hostname);
+        prefs.putString("ssid", ssid);
+        prefs.putString("wifipass", wifipass);
 
-    String s = "<h2>Setup complete</h2><p>Device will be connected to \"";
-    s += ssid;
-    s += "\" after restart.</p><p>Your computer also need to re-connect to "
-         "\"";
-    s += ssid;
-    s += R"=====(
+        String s = "<h2>Setup complete</h2><p>Device will be connected to \"";
+        s += ssid;
+        s += "\" after restart.</p><p>Your computer also need to re-connect to "
+             "\"";
+        s += ssid;
+        s += R"=====(
 ".</p><p><button class="pure-button" onclick="return quitBox();">Close</button></p>
 <script>function quitBox() { open(location, '_self').close();return false;};setTimeout("quitBox()",10000);</script>
 )=====";
-    webServer.send(200, "text/html", makePage("Wi-Fi Settings", s));
-    ESP.restart();
-    while (1) {
-      delay(0);
-    }
-  });
-  webServer.onNotFound([]() {
-    int n = WiFi.scanNetworks();
-    delay(100);
-    String ssidList = "";
-    for (int i = 0; i < n; ++i) {
-      ssidList += "<option value=\"";
-      ssidList += WiFi.SSID(i);
-      ssidList += "\">";
-      ssidList += WiFi.SSID(i);
-      ssidList += "</option>";
-    }
-    String s = R"=====(
+        webServer.send(200, "text/html", makePage("Wi-Fi Settings", s));
+        ESP.restart();
+        while (1) {
+            delay(0);
+        }
+    });
+    webServer.onNotFound([]() {
+        int n = WiFi.scanNetworks();
+        delay(100);
+        String ssidList = "";
+        for (int i = 0; i < n; ++i) {
+            ssidList += "<option value=\"";
+            ssidList += WiFi.SSID(i);
+            ssidList += "\">";
+            ssidList += WiFi.SSID(i);
+            ssidList += "</option>";
+        }
+        String s = R"=====(
 <div class="l-content">
 <div class="l-box">
 <h3 class="if-head">WiFi Setting</h3>
@@ -369,8 +398,8 @@ You can specify site name for accessing a name like http://aquamonitor.local/</p
 <form class="pure-form pure-form-stacked" method="get" action="setap" name="tm"><label for="ssid">SSID: </label>
 <select id="ssid" name="ssid">
 )=====";
-    s += ssidList;
-    s += R"=====(
+        s += ssidList;
+        s += R"=====(
 </select>
 <label for="pass">Password: </label><input id="pass" name="pass" length=64 type="password">
 <label for="site" >Site name: </label><input id="site" name="site" length=32 type="text" placeholder="Site name">
@@ -378,41 +407,130 @@ You can specify site name for accessing a name like http://aquamonitor.local/</p
 </div>
 </div>
 )=====";
-    webServer.send(200, "text/html", makePage("Wi-Fi Settings", s));
-  });
-  webServer.begin();
+        webServer.send(200, "text/html", makePage("Wi-Fi Settings", s));
+    });
+    webServer.begin();
 }
 
+boolean connectWifi() {
+    boolean state = true;
+    int i = 0;
 
-boolean connectWifi(){
-  boolean state = true;
-  int i = 0;
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid.c_str(), wifipass.c_str());
+    Serial.println("Connecting to WiFi");
 
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid.c_str(), wifipass.c_str());
-  Serial.println("Connecting to WiFi");
-
-  // Wait for connection
-  Serial.print("Connecting...");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-    if (i > 20){
-      state = false; break;
+    // Wait for connection
+    Serial.print("Connecting...");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+        if (i > 20) {
+            state = false;
+            break;
+        }
+        i++;
     }
-    i++;
-  }
-  Serial.println("");
-  if (state){
-    Serial.print("Connected to ");
-    Serial.println(ssid);
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-  }
-  else {
-    Serial.println("Connection failed.");
-  }
-  return state;
+    Serial.println("");
+    if (state) {
+        Serial.print("Connected to ");
+        Serial.println(ssid);
+        Serial.print("IP address: ");
+        Serial.println(WiFi.localIP());
+    } else {
+        Serial.println("Connection failed.");
+    }
+    return state;
+}
+
+/*void post_alive() {
+    char params[128];
+
+    if (use_postdb) {
+        String apiurl = url_apiserver + "/aqua/alive";
+        String ipaddress = WiFi.localIP().toString();
+
+        Serial.println(apiurl);
+
+        http.begin(client, apiurl.c_str());
+        http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+        sprintf(params, "ipaddress=%s&label=%s", ipaddress.c_str(),
+                hostname.c_str());
+        int httpCode = http.POST(params);
+        if (httpCode > 0) {
+            Serial.printf("[HTTP] POST alive... code: %d\n", httpCode);
+            Serial.printf("[HTTP] url: %s params: %s\n", apiurl.c_str(), params);
+            //    valid_db_server = true;
+        } else {
+            Serial.printf(
+                "[ERROR] POST alive... no connection or no HTTP server: %s\n",
+                http.errorToString(httpCode).c_str());
+            Serial.printf("[ERROR] url: %s params: %s\n", apiurl.c_str(), params);
+            //    valid_db_server = false;
+        }
+        http.end();
+    }
+}*/
+
+int check_room(uint32_t student_id) {
+    char params[128];
+    int is_authorized = 0;
+    sprintf(params, "%s/%8d", room_name, student_id);
+    String apiurl = url_apiserver + "/lock/room/" + String(params);
+    Serial.println(apiurl);
+    http.begin(client, apiurl.c_str());
+    int httpCode = http.GET();
+    if (httpCode > 0) {
+        Serial.printf("[HTTP] GET /lock/univid ... code: %d\n", httpCode);
+        Serial.printf("[HTTP] url: %s \n", apiurl.c_str());
+        is_authorized = http.getString().toInt();
+    } else {
+        Serial.printf(
+            "[ERROR] GET /lock/univid... no connection or no HTTP server: %s\n",
+            http.errorToString(httpCode).c_str());
+        Serial.printf("[HTTP] url: %s \n", apiurl.c_str());
+        //    valid_db_server = false;
+    }
+    http.end();
+    return is_authorized;
+}
+
+void post_lock(int command, String device) {  // 0 : unlock,   1 : lock
+    char params[128];
+
+    String apiurl = url_apiserver + "/lock/" + (command == 0 ? "unlock" : "lock");
+    Serial.println(apiurl);
+    http.begin(client, apiurl.c_str());
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    sprintf(params, "id=%s", device.c_str());
+    int httpCode = http.POST(params);
+    if (httpCode > 0) {
+        Serial.printf("[HTTP] POST lock ... code: %d\n", httpCode);
+        Serial.printf("[HTTP] url: %s params: %s\n", apiurl.c_str(), params);
+        //    valid_db_server = true;
+    } else {
+        Serial.printf(
+            "[ERROR] POST lock... no connection or no HTTP server: %s\n",
+            http.errorToString(httpCode).c_str());
+        Serial.printf("[ERROR] url: %s params: %s\n", apiurl.c_str(), params);
+        //    valid_db_server = false;
+    }
+    http.end();
+}
+
+String mac2deviceid(String mac) {
+    String deviceid = "";
+    mac.toUpperCase();
+    for (int i = 0; i < mac.length(); i++) {
+        if (mac[i] != ':') {
+            if ((mac[i] >= '0' && mac[i] <= '9') || (mac[i] >= 'A' && mac[i] <= 'F')) {
+                deviceid += mac[i];
+            } else {
+                return "";
+            }
+        }
+    }
+    return deviceid;
 }
 
 void cardreading() {
@@ -422,6 +540,8 @@ void cardreading() {
     //    }
 }
 
+int tenseconds_timer = 0;
+
 void setup(void) {
     // put your setup code here, to run once:
     pinMode(PIN_PN532_IRQ, INPUT_PULLUP);
@@ -429,7 +549,7 @@ void setup(void) {
 
     prefs.begin("aquatan", false);
     hostname = prefs.getString("hostname", hostname);
-    url_endpoint = prefs.getString("url_endpoint", url_endpoint);
+    url_apiserver = prefs.getString("url_apiserver", url_apiserver);
     lock_mac = prefs.getString("lock_mac", lock_mac);
     ssid = prefs.getString("ssid", ssid);
     wifipass = prefs.getString("wifipass", wifipass);
@@ -437,12 +557,7 @@ void setup(void) {
     lcd->init();
     lcd->setFont(&fonts::Font2);
     lcd->setBrightness(128);
-    lcd->setCursor(10, 0);
-    //    lcd->println("Hello World");
-
     bg.setMapData(bgmap);
-    //    drawBitmap16((unsigned char *)bgimg[0], 100, 100, 32, 32);
-    // drawMap(0,0,10,8);
     bg.drawEntireMap();
 
     aquatan.start(160 - 32, 120 + 64, ORIENT_FRONT);
@@ -452,105 +567,92 @@ void setup(void) {
     Serial.println("Hello!");
 
     NimBLEAddress lock_addr(lock_mac.c_str(), 1);
-
     NimBLEDevice::init("");
     NimBLEDevice::whiteListAdd(lock_addr);
     pBLEScan = NimBLEDevice::getScan();
     pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks(), true);
     pBLEScan->setFilterPolicy(BLE_HCI_SCAN_FILT_USE_WL);
-    pBLEScan->setMaxResults(0); // do not store the scan results, use callback only.
+    pBLEScan->setMaxResults(0);  // do not store the scan results, use callback only.
 
-    nfc.begin();
-    Wire.setClock(50000UL);
-
-    messageBox(0, 16, "Connect SSID: " + String(apSSID));
-
+    messageBox(0, 0, "Connecting WiFi");
     if (!connectWifi()) {
+        messageBox(0, 0, "Connect SSID:" + String(apSSID));
         WiFi.mode(WIFI_AP);
         Serial.println("Wifi AP mode");
         WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
         WiFi.softAP(apSSID);
         dnsServer.start(53, "*", apIP);
         wifi_ap_mode = true;
+    } else {
+        //        WiFi.setSleep(false);
+        ArduinoOTA.setHostname(hostname.c_str());
+        ArduinoOTA
+            .onStart([]() {
+                String type;
+                if (ArduinoOTA.getCommand() == U_FLASH)
+                    type = "sketch";
+                else  // U_SPIFFS
+                    type = "filesystem";
+                // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS
+                // using SPIFFS.end()
+                Serial.println("Start updating " + type);
+            })
+            .onEnd([]() {
+                Serial.println("\nEnd");
+            })
+            .onProgress([](unsigned int progress, unsigned int total) {
+                Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+            })
+            .onError([](ota_error_t error) {
+                Serial.printf("Error[%u]: ", error);
+                if (error == OTA_AUTH_ERROR)
+                    Serial.println("Auth Failed");
+                else if (error == OTA_BEGIN_ERROR)
+                    Serial.println("Begin Failed");
+                else if (error == OTA_CONNECT_ERROR)
+                    Serial.println("Connect Failed");
+                else if (error == OTA_RECEIVE_ERROR)
+                    Serial.println("Receive Failed");
+                else if (error == OTA_END_ERROR)
+                    Serial.println("End Failed");
+            });
+        ArduinoOTA.begin();
+        bg.drawMap(0, 0, 10, 2);
     }
-    WiFi.setSleep(false);
 
-    bg.drawMap(0, 0, 10, 2);
+    /* PN53x borad initialize */
 
-
-    ArduinoOTA.setHostname(hostname.c_str());
-    ArduinoOTA
-        .onStart([]() {
-            String type;
-            if (ArduinoOTA.getCommand() == U_FLASH)
-                type = "sketch";
-            else  // U_SPIFFS
-                type = "filesystem";
-            // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS
-            // using SPIFFS.end()
-            Serial.println("Start updating " + type);
-        })
-        .onEnd([]() {
-            Serial.println("\nEnd");
-        })
-        .onProgress([](unsigned int progress, unsigned int total) {
-            Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-        })
-        .onError([](ota_error_t error) {
-            Serial.printf("Error[%u]: ", error);
-            if (error == OTA_AUTH_ERROR)
-                Serial.println("Auth Failed");
-            else if (error == OTA_BEGIN_ERROR)
-                Serial.println("Begin Failed");
-            else if (error == OTA_CONNECT_ERROR)
-                Serial.println("Connect Failed");
-            else if (error == OTA_RECEIVE_ERROR)
-                Serial.println("Receive Failed");
-            else if (error == OTA_END_ERROR)
-                Serial.println("End Failed");
-        });
-    ArduinoOTA.begin();
-
+    nfc.begin();
+    Wire.setClock(50000UL);
     uint32_t versiondata = nfc.getFirmwareVersion();
     if (!versiondata) {
         Serial.print("Didn't find PN53x board");
-        lcd->setCursor(10, 0);
-        lcd->println("Didn't find PN53x board");
+        messageBox(0, 0, "No PN53x found.");
         while (1) {
             delay(10);
         };  // halt
+    } else {
+        Serial.print("Found chip PN5");
+        Serial.println((versiondata >> 24) & 0xFF, HEX);
+        Serial.print("Firmware ver. ");
+        Serial.print((versiondata >> 16) & 0xFF, DEC);
+        Serial.print('.');
+        Serial.println((versiondata >> 8) & 0xFF, DEC);
+        nfc.setPassiveActivationRetries(0xFF);
+        nfc.SAMConfig();
     }
-
-    //    lcd->setCursor(100, 0);
-    //    lcd->println("Hello World2");
-
-    // Got ok data, print it out!
-    Serial.print("Found chip PN5");
-    Serial.println((versiondata >> 24) & 0xFF, HEX);
-    Serial.print("Firmware ver. ");
-    Serial.print((versiondata >> 16) & 0xFF, DEC);
-    Serial.print('.');
-    Serial.println((versiondata >> 8) & 0xFF, DEC);
-
     // Set the max number of retry attempts to read from a card
     // This prevents us from waiting forever for a card, which is
     // the default behaviour of the PN532.
-    nfc.setPassiveActivationRetries(0xFF);
-    nfc.SAMConfig();
 
     memset(_prevIDm, 0, 8);
-    uint16_t systemCode = 0xFE00;
-    uint8_t requestCode = 0x01;  // System Code request
-    uint8_t idm[8];
-    uint8_t pmm[8];
-    uint16_t systemCodeResponse;
     nfc.felica_WaitingCard(systemCode, requestCode, idm, pmm, &systemCodeResponse);
     attachInterrupt(PIN_PN532_IRQ, cardreading, FALLING);
 
-
     InitI2SSpeakerOrMic(MODE_MIC);
-    if (wifi_ap_mode) {
+    if (!wifi_ap_mode) {
         startWebServer();
+        bg.drawMap(0, 0, 10, 2);
     } else {
         startWebServer_ap();
     }
@@ -558,14 +660,10 @@ void setup(void) {
 
 uint32_t move_prev_millis = 0;
 boolean touch = false;
+boolean BtnA, BtnB, BtnC;
 
 void loop(void) {
     int8_t ret;
-    uint16_t systemCode = 0xFE00;
-    uint8_t requestCode = 0x01;  // System Code request
-    uint8_t idm[8];
-    uint8_t pmm[8];
-    uint16_t systemCodeResponse;
 
     webServer.handleClient();
     if (wifi_ap_mode) {
@@ -575,7 +673,7 @@ void loop(void) {
         ArduinoOTA.handle();
     }
 
-    if(pBLEScan->isScanning() == false) {
+    if (pBLEScan->isScanning() == false) {
         pBLEScan->start(0, nullptr, false);
     }
 
@@ -583,6 +681,20 @@ void loop(void) {
     if (pos.x != -1) {
         if (!touch) {
             touch = true;
+            if (pos.y > 240) {
+                // Yが240以上はボタンのエリア
+                Serial.println("Button Area");
+                if (pos.x < 109) {
+                    BtnA = true;
+                    playSound(SE_PU);
+                } else if (pos.x > 218) {
+                    BtnC = true;
+                    playSound(SE_PU);
+                } else if (pos.x >= 109 && pos.x <= 218) {
+                    BtnB = true;
+                    playSound(SE_PU);
+                }
+            }
             if (pos.x >= 0 && pos.x < 320 && pos.y < 240 && pos.y > 96) {
                 int to_x = pos.x - pos.x % 32;
                 int to_y = pos.y - pos.y % 32;
@@ -594,6 +706,13 @@ void loop(void) {
         if (touch) {
             touch = false;
         }
+    }
+
+    if (BtnA) {
+        BtnA = false;
+        Serial.println("Button B");
+        messageBox(0, 0, "IP: " + WiFi.localIP().toString());
+        tenseconds_timer = millis();
     }
 
     if (irq) {
@@ -663,8 +782,6 @@ void loop(void) {
             }
             Serial.println();
 
-            messageBox(0, 0, str_student_id);
-
             //            lcd->printf("%08d", student_id);
             playSound(2);
 
@@ -683,22 +800,22 @@ void loop(void) {
             }
             Serial.println();
 
-            /* student_id が valid かどうかを labapi に問い合わせ */
-
-            /* もし idm が返ってきたら idm も比較して不一致なら NG */
-
-            /* idmが返ってこない場合にはidmを登録 */
-
-            /* student id が valid なら switchbot apiに解錠を送る．*/
-
-            // use switchbot lock api here
-            // getlockstate()
-            //
-
-            //            playSound(0);
-            aquatan.clearActionQueue();
-            aquatan.queueMoveTo(128, 96, 2, 4);
-            aquatan.queueAction(STATUS_TOUCH, 0, 0);
+            if (check_room(student_id)) {
+                messageBox(0, 0, str_student_id + ": " + (lock_state == 0 ? "Unlock" : "Lock"));
+                /* student_id が valid かどうかを labapi に問い合わせ */
+                /* もし idm が返ってきたら idm も比較して不一致なら NG */
+                /* idmが返ってこない場合にはidmを登録 */
+                /* student id が validでで，room_name に許可があれば switchbot apiに解錠を送る．*/
+                String deviceid = mac2deviceid(lock_mac);
+                if (deviceid != "") {
+                    post_lock(lock_state, deviceid);
+                }
+                aquatan.clearActionQueue();
+                aquatan.queueMoveTo(128, 96, 2, 4);
+                aquatan.queueAction(STATUS_TOUCH, 0, 0);
+            } else {
+                messageBox(0, 0, str_student_id + ": NG");
+            }
         }
 
         // Wait 1 second before continuing
@@ -734,18 +851,34 @@ void loop(void) {
     }
     if (aquatan.getStatus() == STATUS_WAIT) {
         aquatan.sleep();
-        aquatan.dequeueAction();
+        int retval = aquatan.dequeueAction();
+        if (retval == STATUS_TOUCH) {
+            // use switchbot lock api here
+            playSound(0);
+            tenseconds_timer = millis();
+        }
+    }
+
+    if (tenseconds_timer > 0 && millis() - tenseconds_timer > 5000) {
+        tenseconds_timer = 0;
+        bg.drawMap(0, 0, 10, 2);
     }
 
     // 鍵を開けた場合は，扉のmapを床で置き換える
     if (lock_state != prev_lock_state) {
-        if (lock_state == 0) { // locked
+        if (lock_state == 0) {  // locked
             bgmap[2][4] = bgmap[2][5] = 1;
             bgmap[3][4] = bgmap[3][5] = 0;
-        } else if (lock_state == 1) { // unlocked
+        } else if (lock_state == 1) {  // unlocked
             bgmap[2][4] = bgmap[2][5] = 2;
             bgmap[3][4] = bgmap[3][5] = 2;
+        } else if (lock_state == 2 || lock_state == 3) {  // locking or unlocking
+            bgmap[2][4] = 19;
+            bgmap[2][5] = 20;
+            bgmap[3][4] = 17;
+            bgmap[3][5] = 18;
         }
+        prev_lock_state = lock_state;
         bg.drawMap(4, 2, 2, 2);
     }
 

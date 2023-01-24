@@ -4,3 +4,5 @@
 .vscode/launch.json
 .vscode/ipch
 .DS_Store
+python/__pycache__/utils.cpython-310.pyc
+python/.env
