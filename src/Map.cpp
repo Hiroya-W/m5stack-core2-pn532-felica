@@ -31,15 +31,18 @@ uint32_t Map::drawMap(uint8_t x, uint8_t y, uint8_t w, uint8_t h) {
     return millis() - startTime;
 }
 
-uint32_t Map::drawMap(LGFX_Sprite *dev, uint8_t x, uint8_t y, uint8_t w, uint8_t h) {
+uint32_t Map::drawSpriteMap(uint8_t x, uint8_t y, uint8_t w, uint8_t h) {
     uint32_t startTime = millis();
     if (x + w > width || y + h > height) return 0;
-
+    LGFX_Sprite *sp = new LGFX_Sprite(tft);
+    sp->createSprite(w*32,h*32);
     for (int i = 0; i < h; i++) {
         for (int j = 0; j < w; j++) {
-            _drawBmp(dev,(unsigned char *)image[map[i+y][j+x]], j * 32, i * 32, 32, 32);
+            _drawBmp(sp,(unsigned char *)image[map[i+y][j+x]], j * 32, i * 32, 32, 32);
         }
     }
+    sp->pushSprite(x*32,y*32);
+    sp->deleteSprite();
     return millis() - startTime;
 }
 

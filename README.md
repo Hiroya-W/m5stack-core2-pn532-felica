@@ -1,6 +1,12 @@
-# m5stack-core2-pn532-felica
+# あくあたんFelica SwitchBot Lock Controller
 
-M5Stack Core2 + PN532でFelicaを読む
+```
+Felica  ))))  PN532 - M5Stack ))))  apiserver (authentication + invoke switchbot api)
+```
+
+
+
+## M5Stack Core2 + PN532でFelicaを読む
 
 `lib`内に利用するPN532ライブラリをsubmoduleとして追加しているので、`--recursive`を付けてCloneする。
 

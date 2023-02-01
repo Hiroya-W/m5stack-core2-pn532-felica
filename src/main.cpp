@@ -110,7 +110,7 @@ boolean wifi_ap_mode = false;
 
 String url_apiserver = "http://192.168.3.192:3001";
 int use_postdb = 1;
-
+boolean use_beaconinfo = false;
 /* Preferences */
 
 Preferences prefs;
@@ -121,11 +121,13 @@ String ssid = "hogehoge";
 String wifipass = "foobar";
 String room_name = "8-302";
 
+String str_student_id = "";
+
 /* BLE variables */
 
 NimBLEScan *pBLEScan;
 
-int lock_state = 0;
+int lock_state = -1;
 int prev_lock_state = 0;
 String strLockState[8] = {"Locked", "Unlocked", "Locking", "Unlocking", "LockingStop", "UnlockingStop", "NotFullyLocked"};
 
@@ -138,10 +140,11 @@ String switchbot_secret;
 
 enum { SE_MAC = 0,
        SE_PI,
+       SE_PU,
        SE_PO,
-       SE_PU };
-const unsigned char *wav_list[] = {macstartup, se_pi, se_pu, se_po};
-const size_t wav_size[] = {sizeof(macstartup), sizeof(se_pi), sizeof(se_pu), sizeof(se_po)};
+       SE_WARN };
+const unsigned char *wav_list[] = {macstartup, se_pi, se_pu, se_po, se_warn};
+const size_t wav_size[] = {sizeof(macstartup), sizeof(se_pi), sizeof(se_pu), sizeof(se_po), sizeof(se_warn)};
 
 void InitI2SSpeakerOrMic(int mode) {
     esp_err_t err = ESP_OK;
@@ -242,18 +245,18 @@ void drawMap(uint8_t x, uint8_t y, uint8_t w, uint8_t h) {
     lcd->endWrite();
 }
 
-void messageBox(int x, int y, String message) {
+void messageBox(int x, int y, String message, uint16_t fgcolor = TFT_WHITE, uint16_t bgcolor = TFT_NAVY) {
     LGFX_Sprite *img;
     img = new LGFX_Sprite(lcd);
     img->setColorDepth(16);
     img->createSprite(320, 64);
     img->fillSprite(TFT_TRANSPARENT);
 
-    img->fillRoundRect(0, 0, 320, 64, 5, TFT_NAVY);
+    img->fillRoundRect(0, 0, 320, 64, 5, bgcolor);
     img->drawRoundRect(0, 0, 320, 64, 5, TFT_WHITE);
     img->drawRoundRect(1, 1, 318, 62, 5, TFT_WHITE);
     img->setFont(&fonts::Font4);
-    img->setTextColor(TFT_WHITE);
+    img->setTextColor(fgcolor);
 
     img->drawString(message, img->width() / 2 - img->textWidth(message) / 2, img->height() / 2 - img->fontHeight() / 2);
 
@@ -266,7 +269,7 @@ void handleStatus() {
     DynamicJsonBuffer jsonBuffer;
     JsonObject &json = jsonBuffer.createObject();
 
-    json["lock_state"] = lock_state;
+    json["lock_state"] = lock_state >= 0 ? strLockState[lock_state] : "NotFound";
     json.printTo(message);
     webServer.send(200, "application/json", message);
 }
@@ -297,15 +300,23 @@ void handleConfig() {
         } else if (argname == "wifipass") {
             wifipass = argv;
             prefs.putString("wifipass", wifipass);
+        } else if (argname == "room_name") {
+            room_name = argv;
+            prefs.putString("room_name", room_name);
         } else if (argname == "url_apiserver") {
             url_apiserver = argv;
             prefs.putString("url_apiserver", url_apiserver);
+        } else if (argname == "use_beaconinfo") {
+            use_beaconinfo = (argv == "true");
+            prefs.putBool("use_beaconinfo", use_beaconinfo);
         }
     }
 
     json["hostname"] = hostname;
     json["url_apiserver"] = url_apiserver;
+    json["use_beaconinfo"] = use_beaconinfo ? "true" : "false";
     json["lock_mac"] = lock_mac;
+    json["room_name"] = room_name;
     json["ssid"] = ssid;
     json["wifipass"] = "******";
     json.printTo(message);
@@ -443,7 +454,7 @@ boolean connectWifi() {
     return state;
 }
 
-/*void post_alive() {
+void post_alive() {
     char params[128];
 
     if (use_postdb) {
@@ -470,26 +481,46 @@ boolean connectWifi() {
         }
         http.end();
     }
-}*/
+}
 
-int check_room(uint32_t student_id) {
+void post_note(String label, String value) {
     char params[128];
-    int is_authorized = 0;
+    String apiurl = url_apiserver + "/aqua/add";
+    Serial.println(apiurl);
+    http.begin(client, apiurl.c_str());
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    sprintf(params, "label=%s&note=%s", label.c_str(), value.c_str());
+    int httpCode = http.POST(params);
+    if (httpCode > 0) {
+        Serial.printf("[HTTP] POST note... code: %d\n", httpCode);
+        Serial.printf("[HTTP] url: %s params: %s\n", apiurl.c_str(), params);
+    } else {
+        Serial.printf(
+            "[ERROR] POST note... no connection or no HTTP server: %s\n",
+            http.errorToString(httpCode).c_str());
+        Serial.printf("[ERROR] url: %s params: %s\n", apiurl.c_str(), params);
+    }
+    http.end();
+}
+int check_room(uint32_t student_id, boolean use_beacon = false) {
+    char params[128];
+    int is_authorized = -1;
     sprintf(params, "%s/%8d", room_name, student_id);
-    String apiurl = url_apiserver + "/lock/room/" + String(params);
+    String command = (use_beacon ? "roombeacon" : "room");
+    String apiurl = url_apiserver + "/lock/" + command + "/" + String(params);
     Serial.println(apiurl);
     http.begin(client, apiurl.c_str());
     int httpCode = http.GET();
     if (httpCode > 0) {
-        Serial.printf("[HTTP] GET /lock/univid ... code: %d\n", httpCode);
+        Serial.printf("[HTTP] GET /lock/%s ... code: %d\n", command.c_str(), httpCode);
         Serial.printf("[HTTP] url: %s \n", apiurl.c_str());
         is_authorized = http.getString().toInt();
     } else {
         Serial.printf(
-            "[ERROR] GET /lock/univid... no connection or no HTTP server: %s\n",
+            "[ERROR] GET /lock/%s... no connection or no HTTP server: %s\n",
+            command.c_str(),
             http.errorToString(httpCode).c_str());
         Serial.printf("[HTTP] url: %s \n", apiurl.c_str());
-        //    valid_db_server = false;
     }
     http.end();
     return is_authorized;
@@ -507,13 +538,11 @@ void post_lock(int command, String device) {  // 0 : unlock,   1 : lock
     if (httpCode > 0) {
         Serial.printf("[HTTP] POST lock ... code: %d\n", httpCode);
         Serial.printf("[HTTP] url: %s params: %s\n", apiurl.c_str(), params);
-        //    valid_db_server = true;
     } else {
         Serial.printf(
             "[ERROR] POST lock... no connection or no HTTP server: %s\n",
             http.errorToString(httpCode).c_str());
         Serial.printf("[ERROR] url: %s params: %s\n", apiurl.c_str(), params);
-        //    valid_db_server = false;
     }
     http.end();
 }
@@ -540,7 +569,7 @@ void cardreading() {
     //    }
 }
 
-int tenseconds_timer = 0;
+int message_timer = 0;
 
 void setup(void) {
     // put your setup code here, to run once:
@@ -553,6 +582,8 @@ void setup(void) {
     lock_mac = prefs.getString("lock_mac", lock_mac);
     ssid = prefs.getString("ssid", ssid);
     wifipass = prefs.getString("wifipass", wifipass);
+    room_name = prefs.getString("room_name", room_name);
+    use_beaconinfo = prefs.getBool("use_beaconinfo", use_beaconinfo);
 
     lcd->init();
     lcd->setFont(&fonts::Font2);
@@ -584,7 +615,7 @@ void setup(void) {
         dnsServer.start(53, "*", apIP);
         wifi_ap_mode = true;
     } else {
-        //        WiFi.setSleep(false);
+        // WiFi.setSleep(false);
         ArduinoOTA.setHostname(hostname.c_str());
         ArduinoOTA
             .onStart([]() {
@@ -627,7 +658,7 @@ void setup(void) {
     uint32_t versiondata = nfc.getFirmwareVersion();
     if (!versiondata) {
         Serial.print("Didn't find PN53x board");
-        messageBox(0, 0, "No PN53x found.");
+        messageBox(0, 0, "No PN53x found.", TFT_WHITE, TFT_MAGENTA);
         while (1) {
             delay(10);
         };  // halt
@@ -675,6 +706,7 @@ void loop(void) {
 
     if (pBLEScan->isScanning() == false) {
         pBLEScan->start(0, nullptr, false);
+        lock_state = -1;
     }
 
     TouchPoint_t pos = M5.Touch.getPressPoint();
@@ -699,7 +731,7 @@ void loop(void) {
                 int to_x = pos.x - pos.x % 32;
                 int to_y = pos.y - pos.y % 32;
                 aquatan.queueMoveTo(to_x, to_y, 4, 4);
-                playSound(1);
+                playSound(SE_PI);
             }
         }
     } else {
@@ -710,9 +742,15 @@ void loop(void) {
 
     if (BtnA) {
         BtnA = false;
-        Serial.println("Button B");
+        Serial.println("Button A");
         messageBox(0, 0, "IP: " + WiFi.localIP().toString());
-        tenseconds_timer = millis();
+        message_timer = millis();
+    }
+    if (BtnC) {
+        BtnC = false;
+        Serial.println("Button C");
+        messageBox(0, 0, "MAC: " + lock_mac);
+        message_timer = millis();
     }
 
     if (irq) {
@@ -772,18 +810,19 @@ void loop(void) {
             Serial.println("OK!");
             Serial.print("  Student ID: ");
             uint32_t student_id = 0;
-            String str_student_id = "";
-            uint32_t keta = 10000000;
+            str_student_id = "";
+//            uint32_t keta = 10000000;
             for (int i = 0; i < 8; i++) {
-                student_id += (blockData[0][6 + i] & 0x0F) * keta;
-                keta /= 10;
-                Serial.printf("%d", blockData[0][6 + i] & 0x0F);
+//                student_id += (blockData[0][6 + i] & 0x0F) * keta;
+//                keta /= 10;
+//                Serial.printf("%d", blockData[0][6 + i] & 0x0F);
                 str_student_id += (char)blockData[0][6 + i];
             }
-            Serial.println();
+            student_id = str_student_id.toInt();
+//            Serial.println();
 
             //            lcd->printf("%08d", student_id);
-            playSound(2);
+            playSound(SE_PU);
 
             Serial.print("  Name: ");
             for (int i = 0; i < 16; i++) {
@@ -800,21 +839,29 @@ void loop(void) {
             }
             Serial.println();
 
-            if (check_room(student_id)) {
+            int res = check_room(student_id, use_beaconinfo);
+            if (res == 0) {
                 messageBox(0, 0, str_student_id + ": " + (lock_state == 0 ? "Unlock" : "Lock"));
                 /* student_id が valid かどうかを labapi に問い合わせ */
                 /* もし idm が返ってきたら idm も比較して不一致なら NG */
                 /* idmが返ってこない場合にはidmを登録 */
                 /* student id が validでで，room_name に許可があれば switchbot apiに解錠を送る．*/
-                String deviceid = mac2deviceid(lock_mac);
-                if (deviceid != "") {
-                    post_lock(lock_state, deviceid);
-                }
+                post_note("door_" + room_name + "_" + (lock_state == 0 ? "unlock" : "lock"), str_student_id);
                 aquatan.clearActionQueue();
                 aquatan.queueMoveTo(128, 96, 2, 4);
                 aquatan.queueAction(STATUS_TOUCH, 0, 0);
+            } else if (res == 1) {
+                messageBox(0, 0, "No Aquatan beacon.", TFT_WHITE, TFT_RED);
+                playSound(SE_WARN);
+                message_timer = millis();
+            } else if (res == 2) {
+                messageBox(0, 0, "No permission.", TFT_WHITE, TFT_RED);
+                playSound(SE_WARN);
+                message_timer = millis();
             } else {
-                messageBox(0, 0, str_student_id + ": NG");
+                messageBox(0, 0, "Server error.", TFT_WHITE, TFT_MAGENTA);
+                playSound(SE_WARN);
+                message_timer = millis();
             }
         }
 
@@ -854,18 +901,25 @@ void loop(void) {
         int retval = aquatan.dequeueAction();
         if (retval == STATUS_TOUCH) {
             // use switchbot lock api here
-            playSound(0);
-            tenseconds_timer = millis();
+            String deviceid = mac2deviceid(lock_mac);
+            if (deviceid != "") {
+                post_lock(lock_state, deviceid);
+                playSound(SE_MAC);
+            }
+            message_timer = millis();
         }
     }
 
-    if (tenseconds_timer > 0 && millis() - tenseconds_timer > 5000) {
-        tenseconds_timer = 0;
+    if (message_timer > 0 && millis() - message_timer > 5000) {
+        message_timer = 0;
         bg.drawMap(0, 0, 10, 2);
     }
 
     // 鍵を開けた場合は，扉のmapを床で置き換える
     if (lock_state != prev_lock_state) {
+        if (prev_lock_state < 0) {
+            message_timer = 1;
+        }
         if (lock_state == 0) {  // locked
             bgmap[2][4] = bgmap[2][5] = 1;
             bgmap[3][4] = bgmap[3][5] = 0;
@@ -877,6 +931,9 @@ void loop(void) {
             bgmap[2][5] = 20;
             bgmap[3][4] = 17;
             bgmap[3][5] = 18;
+        } else if (lock_state < 0) {
+            messageBox(0, 0, "Cannot find lock.", TFT_WHITE, TFT_MAGENTA);
+            prev_lock_state = lock_state;
         }
         prev_lock_state = lock_state;
         bg.drawMap(4, 2, 2, 2);
