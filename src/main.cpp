@@ -121,7 +121,7 @@ String ssid = "hogehoge";
 String wifipass = "foobar";
 String room_name = "8-302";
 
-String str_student_id = "";
+String str_student_id = "0";
 
 /* BLE variables */
 
@@ -811,17 +811,11 @@ void loop(void) {
             Serial.print("  Student ID: ");
             uint32_t student_id = 0;
             str_student_id = "";
-//            uint32_t keta = 10000000;
             for (int i = 0; i < 8; i++) {
-//                student_id += (blockData[0][6 + i] & 0x0F) * keta;
-//                keta /= 10;
-//                Serial.printf("%d", blockData[0][6 + i] & 0x0F);
                 str_student_id += (char)blockData[0][6 + i];
             }
             student_id = str_student_id.toInt();
-//            Serial.println();
 
-            //            lcd->printf("%08d", student_id);
             playSound(SE_PU);
 
             Serial.print("  Name: ");
@@ -846,7 +840,6 @@ void loop(void) {
                 /* もし idm が返ってきたら idm も比較して不一致なら NG */
                 /* idmが返ってこない場合にはidmを登録 */
                 /* student id が validでで，room_name に許可があれば switchbot apiに解錠を送る．*/
-                post_note("door_" + room_name + "_" + (lock_state == 0 ? "unlock" : "lock"), str_student_id);
                 aquatan.clearActionQueue();
                 aquatan.queueMoveTo(128, 96, 2, 4);
                 aquatan.queueAction(STATUS_TOUCH, 0, 0);
@@ -923,9 +916,13 @@ void loop(void) {
         if (lock_state == 0) {  // locked
             bgmap[2][4] = bgmap[2][5] = 1;
             bgmap[3][4] = bgmap[3][5] = 0;
+            post_note("door_" + room_name + "_" + "lock", str_student_id);
+            str_student_id = "0";
         } else if (lock_state == 1) {  // unlocked
             bgmap[2][4] = bgmap[2][5] = 2;
             bgmap[3][4] = bgmap[3][5] = 2;
+            post_note("door_" + room_name + "_" + "unlock", str_student_id);
+            str_student_id = "0";
         } else if (lock_state == 2 || lock_state == 3) {  // locking or unlocking
             bgmap[2][4] = 19;
             bgmap[2][5] = 20;
